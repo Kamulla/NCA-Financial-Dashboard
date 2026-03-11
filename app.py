@@ -210,5 +210,3 @@ with tab5:
         liab_trend = liab_filtered.groupby("Financial Year")["Amount"].sum().reset_index()
         fig_liab = px.line(liab_trend, x="Financial Year", y="Amount", markers=True, title="Liabilities Growth Over Time")
         st.plotly_chart(fig_liab, use_container_width=True)
-    else:
-        st.write("Trend analysis not available for a single year.")
