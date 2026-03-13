@@ -8,10 +8,18 @@ def load_data():
     expenditure = pd.read_excel(xls, "Expenditure")
     assets = pd.read_excel(xls, "Assets")
     liabilities = pd.read_excel(xls, "Liabilities")
-    cashflow = pd.read_excel(xls, "Cashflow")
+    try:
+        cashflow = pd.read_excel(xls, "Cashflow")
+    except ValueError:
+        cashflow = pd.DataFrame(columns=["Financial Year", "Category", "SubCategory", "Amount"])
+
+    try:
+        budget_performance = pd.read_excel(xls, "Budget Performance")
+    except ValueError:
+        budget_performance = pd.DataFrame(columns=["Financial Year", "Category", "SubCategory", "Amount"])
 
     # Clean column names (remove hidden spaces)
-    for df in [income, expenditure, assets, liabilities, cashflow]:
+    for df in [income, expenditure, assets, liabilities, cashflow, budget_performance]:
         df.columns = df.columns.str.strip()
 
     # Standardize Amount column across sheets
@@ -20,12 +28,16 @@ def load_data():
     assets = assets.rename(columns=lambda x: "Amount" if "Amount" in x else x)
     liabilities = liabilities.rename(columns=lambda x: "Amount" if "Amount" in x else x)
     cashflow = cashflow.rename(columns=lambda x: "Amount" if "Amount" in x else x)
+    budget_performance = budget_performance.rename(columns=lambda x: "Amount" if "Amount" in x else x)
 
     # Ensure numeric values
     income["Amount"] = pd.to_numeric(income["Amount"], errors="coerce")
     expenditure["Amount"] = pd.to_numeric(expenditure["Amount"], errors="coerce")
     assets["Amount"] = pd.to_numeric(assets["Amount"], errors="coerce")
     liabilities["Amount"] = pd.to_numeric(liabilities["Amount"], errors="coerce")
-    cashflow["Amount"] = pd.to_numeric(cashflow["Amount"], errors="coerce")
+    if "Amount" in cashflow.columns:
+        cashflow["Amount"] = pd.to_numeric(cashflow["Amount"], errors="coerce")
+    if "Amount" in budget_performance.columns:
+        budget_performance["Amount"] = pd.to_numeric(budget_performance["Amount"], errors="coerce")
 
-    return income, expenditure, assets, liabilities, cashflow
+    return income, expenditure, assets, liabilities, cashflow, budget_performance
