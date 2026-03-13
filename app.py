@@ -3,6 +3,8 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from utils import load_data
+from pathlib import Path
+from datetime import datetime
 
 # --- 1. Page Configuration ---
 st.set_page_config(
@@ -254,6 +256,7 @@ st.markdown(f"""
     """, unsafe_allow_html=True)
 
 # --- 3. Data Loading & Initial Logic ---
+app_last_updated = datetime.fromtimestamp(Path(__file__).stat().st_mtime).strftime("%Y-%m-%d %H:%M")
 income, expenditure, assets, liabilities = load_data()
 
 # Category color maps (consistent across charts)
@@ -331,6 +334,7 @@ with st.sidebar:
             </div>
             <div style='margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.1);'>
                  <span style='color: rgba(255,255,255,0.5); font-size: 0.65rem; font-style: italic;'>Data current as of FY {all_years[-1]}</span>
+                 <div style='color: rgba(255,255,255,0.5); font-size: 0.65rem; font-style: italic; margin-top: 4px;'>Last updated on: {app_last_updated}</div>
             </div>
         </div>
     """, unsafe_allow_html=True)
@@ -388,6 +392,14 @@ except ValueError:
     prev_year = None
 
 
+def get_prev_year(year, years_list):
+    try:
+        idx = years_list.index(year)
+        return years_list[idx - 1] if idx > 0 else None
+    except ValueError:
+        return None
+
+
 def get_stats(year):
     if year is None: return None
     inc = income[income["Financial Year"] == year]["Amount"].sum()
@@ -413,16 +425,36 @@ liab_filtered = liabilities[liabilities["Financial Year"] == effective_year_for_
 
 
 # --- 6. Executive UI Helpers ---
-def kpi_card(title, value, sub_value, icon, color=NCA_BLUE):
+def kpi_card(title, value, sub_value, icon_html, color=NCA_BLUE):
     st.markdown(f"""
         <div class="metric-card">
             <div class="status-bar" style="background: {color};"></div>
-            <div style="float: right; font-size: 1.5rem; opacity: 0.4;">{icon}</div>
+            <div style="float: right; width: 28px; height: 28px; opacity: 0.7;">{icon_html}</div>
             <div class="metric-title">{title}</div>
             <div class="metric-value">{value}</div>
             <div class="metric-sub-value">{sub_value}</div>
         </div>
     """, unsafe_allow_html=True)
+
+
+def icon_svg(kind, color):
+    if kind == "income":
+        return f"""<svg viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2v20"/><path d="M17 7H9.5a3.5 3.5 0 0 0 0 7H14a3.5 3.5 0 0 1 0 7H6"/>
+        </svg>"""
+    if kind == "top":
+        return f"""<svg viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 20h16"/><path d="M7 20V10"/><path d="M12 20V6"/><path d="M17 20V13"/>
+        </svg>"""
+    if kind == "up":
+        return f"""<svg viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 16l6-6 4 4 6-8"/><path d="M14 6h6v6"/>
+        </svg>"""
+    if kind == "down":
+        return f"""<svg viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 8l6 6 4-4 6 8"/><path d="M14 18h6v-6"/>
+        </svg>"""
+    return ""
 
 
 def format_amount(value):
@@ -490,76 +522,134 @@ active = st.session_state.active_tab
 if active == "Overview":
     if comparison_mode:
         st.warning("Strategic Benchmarking enabled. Cross-period analysis active.")
-    else:
-        st.markdown(f"#### Performance Snapshot: FY {base_year}")
-        col1, col2, col3, col4 = st.columns(4)
 
-        with col1:
-            kpi_card("Revenue", format_amount(current_stats['income']),
-                     format_yoy(current_stats['income'], previous_stats['income'] if previous_stats else None), "💹")
+    st.markdown("#### Portfolio Snapshot: All Years")
 
-        with col2:
-            kpi_card("Expenditure", format_amount(current_stats['expenditure']),
-                     format_yoy(current_stats['expenditure'], previous_stats['expenditure'] if previous_stats else None),
-                     "💸", NCA_ORANGE)
+    income_yearly = income.groupby("Financial Year")["Amount"].sum().sort_index()
+    exp_yearly = expenditure.groupby("Financial Year")["Amount"].sum().sort_index()
+    assets_yearly = assets.groupby("Financial Year")["Amount"].sum().sort_index()
+    liab_yearly = liabilities.groupby("Financial Year")["Amount"].sum().sort_index()
+    surplus_yearly = income_yearly.subtract(exp_yearly, fill_value=0)
 
-        with col3:
-            kpi_card("Assets", format_amount(current_stats['assets']),
-                     format_yoy(current_stats['assets'], previous_stats['assets'] if previous_stats else None), "🏢")
+    total_income_all = income_yearly.sum()
+    total_exp_all = exp_yearly.sum()
+    avg_surplus = surplus_yearly.mean() if not surplus_yearly.empty else 0
 
-        with col4:
-            kpi_card("Liabilities", format_amount(current_stats['liabilities']),
-                     format_yoy(current_stats['liabilities'], previous_stats['liabilities'] if previous_stats else None),
-                     "🧾", "#64748B")
+    def calc_cagr(series):
+        if series is None or series.empty:
+            return None
+        start = series.iloc[0]
+        end = series.iloc[-1]
+        periods = max(len(series) - 1, 0)
+        if start <= 0 or periods == 0:
+            return None
+        return (end / start) ** (1 / periods) - 1
 
-        st.markdown("---")
-        if show_trend:
-            st.markdown("#### Growth Trajectory")
-            overview_trend = pd.DataFrame({
-                "Financial Year": income.groupby("Financial Year")["Amount"].sum().index,
-                "Income": income.groupby("Financial Year")["Amount"].sum().values,
-                "Expenditure": expenditure.groupby("Financial Year")["Amount"].sum().values
-            })
-            fig_ie = px.line(overview_trend, x="Financial Year", y=["Income", "Expenditure"],
-                             title="Revenue vs Expenditure",
-                             markers=True, color_discrete_map={"Income": NCA_BLUE, "Expenditure": NCA_ORANGE})
-            st.plotly_chart(apply_executive_style(fig_ie), use_container_width=True)
+    income_cagr = calc_cagr(income_yearly)
+    exp_cagr = calc_cagr(exp_yearly)
 
-            assets_trend = pd.DataFrame({
-                "Financial Year": assets.groupby("Financial Year")["Amount"].sum().index,
-                "Assets": assets.groupby("Financial Year")["Amount"].sum().values,
-                "Liabilities": liabilities.groupby("Financial Year")["Amount"].sum().values
-            })
-            fig_al = px.line(assets_trend, x="Financial Year", y=["Assets", "Liabilities"],
-                             title="Assets vs Liabilities",
-                             markers=True, color_discrete_map={"Assets": NCA_BLUE, "Liabilities": NCA_ORANGE})
-            st.plotly_chart(apply_executive_style(fig_al), use_container_width=True)
-        else:
-            st.markdown(f"#### Capital Breakdown: FY {base_year}")
-            cl, cr = st.columns(2)
-            with cl:
-                fig_inc = px.pie(income_filtered.groupby("Category")["Amount"].sum().reset_index(),
-                                 names="Category", values="Amount", hole=0.7, title="Revenue Allocation",
-                                 color_discrete_sequence=[NCA_BLUE, NCA_ORANGE, "#334155", "#94A3B8"])
-                st.plotly_chart(apply_executive_style(fig_inc), use_container_width=True)
-            with cr:
-                fig_exp = px.pie(exp_filtered.groupby("Category")["Amount"].sum().reset_index(),
-                                 names="Category", values="Amount", hole=0.7, title="Expenditure Profile",
-                                 color_discrete_sequence=[NCA_ORANGE, NCA_BLUE, "#64748B", "#CBD5E1"])
-                st.plotly_chart(apply_executive_style(fig_exp), use_container_width=True)
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        kpi_card(
+            "Total Revenue",
+            format_amount(total_income_all),
+            "All Fiscal Years",
+            icon_svg("income", NCA_BLUE)
+        )
+    with col2:
+        kpi_card(
+            "Total Expenditure",
+            format_amount(total_exp_all),
+            "All Fiscal Years",
+            icon_svg("down", NCA_ORANGE),
+            NCA_ORANGE
+        )
+    with col3:
+        kpi_card(
+            "Avg Annual Surplus",
+            format_amount(avg_surplus),
+            f"FY {all_years[0]} - {all_years[-1]}",
+            icon_svg("top", NCA_TEAL),
+            NCA_TEAL
+        )
+    with col4:
+        cagr_label = "N/A" if income_cagr is None else f"{income_cagr * 100:.1f}% CAGR"
+        kpi_card(
+            "Revenue Growth",
+            cagr_label,
+            "Across period",
+            icon_svg("up", NCA_PURPLE),
+            NCA_PURPLE
+        )
 
-            st.markdown(f"#### Balance Sheet Composition: FY {base_year}")
-            al, ar = st.columns(2)
-            with al:
-                fig_ast = px.pie(assets_filtered.groupby("Category")["Amount"].sum().reset_index(),
-                                 names="Category", values="Amount", hole=0.7, title="Assets Allocation",
-                                 color_discrete_sequence=[NCA_BLUE, NCA_ORANGE, "#334155", "#94A3B8"])
-                st.plotly_chart(apply_executive_style(fig_ast), use_container_width=True)
-            with ar:
-                fig_liab = px.pie(liab_filtered.groupby("Category")["Amount"].sum().reset_index(),
-                                  names="Category", values="Amount", hole=0.7, title="Liabilities Profile",
-                                  color_discrete_sequence=[NCA_ORANGE, NCA_BLUE, "#64748B", "#CBD5E1"])
-                st.plotly_chart(apply_executive_style(fig_liab), use_container_width=True)
+    coverage_series = assets_yearly.divide(liab_yearly.replace(0, pd.NA))
+    latest_coverage = coverage_series.get(latest_year, pd.NA)
+    avg_coverage = coverage_series.dropna().mean() if coverage_series is not None else pd.NA
+
+    cov_col1, cov_col2 = st.columns(2)
+    with cov_col1:
+        kpi_card(
+            "Debt Coverage (Latest FY)",
+            f"{latest_coverage:.2f}x" if pd.notna(latest_coverage) else "N/A",
+            f"FY {latest_year}",
+            icon_svg("top", NCA_TEAL),
+            NCA_TEAL
+        )
+    with cov_col2:
+        kpi_card(
+            "Avg Coverage (All Years)",
+            f"{avg_coverage:.2f}x" if pd.notna(avg_coverage) else "N/A",
+            "Assets / Liabilities",
+            icon_svg("top", NCA_BLUE),
+            NCA_BLUE
+        )
+
+    st.markdown("---")
+    st.markdown("#### Revenue and Expenditure Trend")
+    overview_trend = pd.DataFrame({
+        "Financial Year": income_yearly.index,
+        "Income": income_yearly.values,
+        "Expenditure": exp_yearly.reindex(income_yearly.index).fillna(0).values
+    })
+    fig_ie = px.line(
+        overview_trend,
+        x="Financial Year",
+        y=["Income", "Expenditure"],
+        title="Revenue vs Expenditure (All Years)",
+        markers=True,
+        color_discrete_map={"Income": NCA_BLUE, "Expenditure": NCA_ORANGE}
+    )
+    st.plotly_chart(apply_executive_style(fig_ie), use_container_width=True)
+
+    st.markdown("#### Balance Sheet Trend")
+    assets_trend = pd.DataFrame({
+        "Financial Year": assets_yearly.index,
+        "Assets": assets_yearly.values,
+        "Liabilities": liab_yearly.reindex(assets_yearly.index).fillna(0).values
+    })
+    fig_al = px.line(
+        assets_trend,
+        x="Financial Year",
+        y=["Assets", "Liabilities"],
+        title="Assets vs Liabilities (All Years)",
+        markers=True,
+        color_discrete_map={"Assets": NCA_BLUE, "Liabilities": NCA_ORANGE}
+    )
+    st.plotly_chart(apply_executive_style(fig_al), use_container_width=True)
+
+    st.markdown("#### Surplus Trajectory")
+    surplus_df = pd.DataFrame({
+        "Financial Year": surplus_yearly.index,
+        "Surplus": surplus_yearly.values
+    })
+    fig_surplus = px.bar(
+        surplus_df,
+        x="Financial Year",
+        y="Surplus",
+        title="Annual Surplus (Income - Expenditure)",
+        color_discrete_sequence=[NCA_TEAL]
+    )
+    st.plotly_chart(apply_executive_style(fig_surplus), use_container_width=True)
 
 elif active == "Income":
     if comparison_mode:
@@ -608,7 +698,94 @@ elif active == "Income":
                         fig_bar.update_layout(yaxis_title="", xaxis_title="Amount")
                         st.plotly_chart(apply_executive_style(fig_bar), use_container_width=True)
     else:
-        section_header("FY Snapshot", f"Distribution and top sub-categories for FY {effective_year_for_tabs}.")
+        income_prev_year = get_prev_year(effective_year_for_tabs, all_years)
+        income_prev_df = income[income["Financial Year"] == income_prev_year] if income_prev_year else pd.DataFrame()
+        income_curr_total = income_filtered["Amount"].sum()
+        income_prev_total = income_prev_df["Amount"].sum() if not income_prev_df.empty else None
+
+        income_cat = income_filtered.groupby(["Category"])["Amount"].sum().reset_index()
+        prev_cat = (
+            income_prev_df.groupby(["Category"])["Amount"].sum().reset_index()
+            if not income_prev_df.empty else pd.DataFrame(columns=["Category", "Amount"])
+        )
+
+        top_cat_label = None
+        top_cat_amount = None
+        top_cat_prev_amount = None
+        if not income_cat.empty:
+            top_cat_row = income_cat.sort_values("Amount", ascending=False).iloc[0]
+            top_cat_label = f"{top_cat_row['Category']}"
+            top_cat_amount = top_cat_row["Amount"]
+            if not prev_cat.empty:
+                top_cat_prev_amount = prev_cat[prev_cat["Category"] == top_cat_row["Category"]]["Amount"].sum()
+
+        income_subcat = income_filtered.groupby(["Category", "SubCategory"])["Amount"].sum().reset_index()
+        prev_subcat = (
+            income_prev_df.groupby(["Category", "SubCategory"])["Amount"].sum().reset_index()
+            if not income_prev_df.empty else pd.DataFrame(columns=["Category", "SubCategory", "Amount"])
+        )
+
+        subcat_delta = None
+        if not income_subcat.empty and not prev_subcat.empty:
+            subcat_delta = income_subcat.merge(
+                prev_subcat, on=["Category", "SubCategory"], how="left", suffixes=("_curr", "_prev")
+            )
+            subcat_delta["Amount_prev"] = subcat_delta["Amount_prev"].fillna(0)
+            subcat_delta["Delta"] = subcat_delta["Amount_curr"] - subcat_delta["Amount_prev"]
+
+        largest_increase_label = None
+        largest_increase_curr = None
+        largest_increase_prev = None
+        largest_decrease_label = None
+        largest_decrease_curr = None
+        largest_decrease_prev = None
+
+        if subcat_delta is not None and not subcat_delta.empty:
+            inc_row = subcat_delta.sort_values("Delta", ascending=False).iloc[0]
+            largest_increase_label = f"{inc_row['SubCategory']}"
+            largest_increase_curr = inc_row["Amount_curr"]
+            largest_increase_prev = inc_row["Amount_prev"]
+
+            dec_row = subcat_delta.sort_values("Delta", ascending=True).iloc[0]
+            largest_decrease_label = f"{dec_row['SubCategory']}"
+            largest_decrease_curr = dec_row["Amount_curr"]
+            largest_decrease_prev = dec_row["Amount_prev"]
+
+        st.markdown(f"#### FY Snapshot: {effective_year_for_tabs}")
+        kpi_cols = st.columns(4)
+        with kpi_cols[0]:
+            kpi_card(
+                "Income",
+                format_amount(income_curr_total),
+                f"Overall<br>{format_yoy(income_curr_total, income_prev_total)}",
+                icon_svg("income", NCA_BLUE)
+            )
+        with kpi_cols[1]:
+            kpi_card(
+                "Top Category",
+                format_amount(top_cat_amount) if top_cat_amount is not None else "N/A",
+                f"{top_cat_label}<br>{format_yoy(top_cat_amount, top_cat_prev_amount)}" if top_cat_label else "N/A",
+                icon_svg("top", NCA_TEAL),
+                NCA_TEAL
+            )
+        with kpi_cols[2]:
+            kpi_card(
+                "Largest Increase",
+                format_amount(largest_increase_curr - largest_increase_prev) if largest_increase_label else "N/A",
+                f"{largest_increase_label}<br>{format_yoy(largest_increase_curr, largest_increase_prev)}" if largest_increase_label else "N/A",
+                icon_svg("up", NCA_PURPLE),
+                NCA_PURPLE
+            )
+        with kpi_cols[3]:
+            kpi_card(
+                "Largest Decrease",
+                format_amount(largest_decrease_curr - largest_decrease_prev) if largest_decrease_label else "N/A",
+                f"{largest_decrease_label}<br>{format_yoy(largest_decrease_curr, largest_decrease_prev)}" if largest_decrease_label else "N/A",
+                icon_svg("down", NCA_ORANGE),
+                NCA_ORANGE
+            )
+
+        section_header("FY Distribution", f"Distribution and top sub-categories for FY {effective_year_for_tabs}.")
         snap_left, snap_right = st.columns(2)
         with snap_left:
             data = income_filtered.groupby("Category")["Amount"].sum().reset_index()
@@ -700,7 +877,95 @@ elif active == "Income":
 
 elif active == "Expenditure":
     if not comparison_mode:
-        section_header("FY Snapshot", f"Distribution and top sub-categories for FY {effective_year_for_tabs}.")
+        exp_prev_year = get_prev_year(effective_year_for_tabs, all_years)
+        exp_prev_df = expenditure[expenditure["Financial Year"] == exp_prev_year] if exp_prev_year else pd.DataFrame()
+        exp_curr_total = exp_filtered["Amount"].sum()
+        exp_prev_total = exp_prev_df["Amount"].sum() if not exp_prev_df.empty else None
+
+        exp_cat = exp_filtered.groupby(["Category"])["Amount"].sum().reset_index()
+        prev_exp_cat = (
+            exp_prev_df.groupby(["Category"])["Amount"].sum().reset_index()
+            if not exp_prev_df.empty else pd.DataFrame(columns=["Category", "Amount"])
+        )
+
+        top_exp_cat_label = None
+        top_exp_cat_amount = None
+        top_exp_cat_prev_amount = None
+        if not exp_cat.empty:
+            top_exp_cat_row = exp_cat.sort_values("Amount", ascending=False).iloc[0]
+            top_exp_cat_label = f"{top_exp_cat_row['Category']}"
+            top_exp_cat_amount = top_exp_cat_row["Amount"]
+            if not prev_exp_cat.empty:
+                top_exp_cat_prev_amount = prev_exp_cat[prev_exp_cat["Category"] == top_exp_cat_row["Category"]]["Amount"].sum()
+
+        exp_subcat = exp_filtered.groupby(["Category", "SubCategory"])["Amount"].sum().reset_index()
+        prev_exp_subcat = (
+            exp_prev_df.groupby(["Category", "SubCategory"])["Amount"].sum().reset_index()
+            if not exp_prev_df.empty else pd.DataFrame(columns=["Category", "SubCategory", "Amount"])
+        )
+
+        exp_subcat_delta = None
+        if not exp_subcat.empty and not prev_exp_subcat.empty:
+            exp_subcat_delta = exp_subcat.merge(
+                prev_exp_subcat, on=["Category", "SubCategory"], how="left", suffixes=("_curr", "_prev")
+            )
+            exp_subcat_delta["Amount_prev"] = exp_subcat_delta["Amount_prev"].fillna(0)
+            exp_subcat_delta["Delta"] = exp_subcat_delta["Amount_curr"] - exp_subcat_delta["Amount_prev"]
+
+        exp_largest_increase_label = None
+        exp_largest_increase_curr = None
+        exp_largest_increase_prev = None
+        exp_largest_decrease_label = None
+        exp_largest_decrease_curr = None
+        exp_largest_decrease_prev = None
+
+        if exp_subcat_delta is not None and not exp_subcat_delta.empty:
+            inc_row = exp_subcat_delta.sort_values("Delta", ascending=False).iloc[0]
+            exp_largest_increase_label = f"{inc_row['SubCategory']}"
+            exp_largest_increase_curr = inc_row["Amount_curr"]
+            exp_largest_increase_prev = inc_row["Amount_prev"]
+
+            dec_row = exp_subcat_delta.sort_values("Delta", ascending=True).iloc[0]
+            exp_largest_decrease_label = f"{dec_row['SubCategory']}"
+            exp_largest_decrease_curr = dec_row["Amount_curr"]
+            exp_largest_decrease_prev = dec_row["Amount_prev"]
+
+        st.markdown(f"#### FY Snapshot: {effective_year_for_tabs}")
+        exp_kpi_cols = st.columns(4)
+        with exp_kpi_cols[0]:
+            kpi_card(
+                "Expenditure",
+                format_amount(exp_curr_total),
+                f"Overall<br>{format_yoy(exp_curr_total, exp_prev_total)}",
+                icon_svg("down", NCA_ORANGE),
+                NCA_ORANGE
+            )
+        with exp_kpi_cols[1]:
+            kpi_card(
+                "Top Category",
+                format_amount(top_exp_cat_amount) if top_exp_cat_amount is not None else "N/A",
+                f"{top_exp_cat_label}<br>{format_yoy(top_exp_cat_amount, top_exp_cat_prev_amount)}" if top_exp_cat_label else "N/A",
+                icon_svg("top", NCA_TEAL),
+                NCA_TEAL
+            )
+        with exp_kpi_cols[2]:
+            kpi_card(
+                "Largest Increase",
+                format_amount(exp_largest_increase_curr - exp_largest_increase_prev) if exp_largest_increase_label else "N/A",
+                f"{exp_largest_increase_label}<br>{format_yoy(exp_largest_increase_curr, exp_largest_increase_prev)}" if exp_largest_increase_label else "N/A",
+                icon_svg("up", NCA_PURPLE),
+                NCA_PURPLE
+            )
+        with exp_kpi_cols[3]:
+            kpi_card(
+                "Largest Decrease",
+                format_amount(exp_largest_decrease_curr - exp_largest_decrease_prev) if exp_largest_decrease_label else "N/A",
+                f"{exp_largest_decrease_label}<br>{format_yoy(exp_largest_decrease_curr, exp_largest_decrease_prev)}" if exp_largest_decrease_label else "N/A",
+                icon_svg("down", NCA_ORANGE),
+                NCA_ORANGE
+            )
+
+        section_header("FY Distribution", f"Distribution and top sub-categories for FY {effective_year_for_tabs}.")
         snap_left, snap_right = st.columns(2)
         with snap_left:
             fig_exp = px.pie(exp_filtered.groupby("Category")["Amount"].sum().reset_index(),
@@ -846,7 +1111,95 @@ elif active == "Expenditure":
 
 elif active == "Assets":
     if not comparison_mode:
-        section_header("FY Snapshot", f"Distribution and top sub-categories for FY {effective_year_for_tabs}.")
+        asset_prev_year = get_prev_year(effective_year_for_tabs, all_years)
+        asset_prev_df = assets[assets["Financial Year"] == asset_prev_year] if asset_prev_year else pd.DataFrame()
+        asset_curr_total = assets_filtered["Amount"].sum()
+        asset_prev_total = asset_prev_df["Amount"].sum() if not asset_prev_df.empty else None
+
+        asset_cat = assets_filtered.groupby(["Category"])["Amount"].sum().reset_index()
+        prev_asset_cat = (
+            asset_prev_df.groupby(["Category"])["Amount"].sum().reset_index()
+            if not asset_prev_df.empty else pd.DataFrame(columns=["Category", "Amount"])
+        )
+
+        top_asset_cat_label = None
+        top_asset_cat_amount = None
+        top_asset_cat_prev_amount = None
+        if not asset_cat.empty:
+            top_asset_cat_row = asset_cat.sort_values("Amount", ascending=False).iloc[0]
+            top_asset_cat_label = f"{top_asset_cat_row['Category']}"
+            top_asset_cat_amount = top_asset_cat_row["Amount"]
+            if not prev_asset_cat.empty:
+                top_asset_cat_prev_amount = prev_asset_cat[prev_asset_cat["Category"] == top_asset_cat_row["Category"]]["Amount"].sum()
+
+        asset_subcat = assets_filtered.groupby(["Category", "SubCategory"])["Amount"].sum().reset_index()
+        prev_asset_subcat = (
+            asset_prev_df.groupby(["Category", "SubCategory"])["Amount"].sum().reset_index()
+            if not asset_prev_df.empty else pd.DataFrame(columns=["Category", "SubCategory", "Amount"])
+        )
+
+        asset_subcat_delta = None
+        if not asset_subcat.empty and not prev_asset_subcat.empty:
+            asset_subcat_delta = asset_subcat.merge(
+                prev_asset_subcat, on=["Category", "SubCategory"], how="left", suffixes=("_curr", "_prev")
+            )
+            asset_subcat_delta["Amount_prev"] = asset_subcat_delta["Amount_prev"].fillna(0)
+            asset_subcat_delta["Delta"] = asset_subcat_delta["Amount_curr"] - asset_subcat_delta["Amount_prev"]
+
+        asset_largest_increase_label = None
+        asset_largest_increase_curr = None
+        asset_largest_increase_prev = None
+        asset_largest_decrease_label = None
+        asset_largest_decrease_curr = None
+        asset_largest_decrease_prev = None
+
+        if asset_subcat_delta is not None and not asset_subcat_delta.empty:
+            inc_row = asset_subcat_delta.sort_values("Delta", ascending=False).iloc[0]
+            asset_largest_increase_label = f"{inc_row['SubCategory']}"
+            asset_largest_increase_curr = inc_row["Amount_curr"]
+            asset_largest_increase_prev = inc_row["Amount_prev"]
+
+            dec_row = asset_subcat_delta.sort_values("Delta", ascending=True).iloc[0]
+            asset_largest_decrease_label = f"{dec_row['SubCategory']}"
+            asset_largest_decrease_curr = dec_row["Amount_curr"]
+            asset_largest_decrease_prev = dec_row["Amount_prev"]
+
+        st.markdown(f"#### FY Snapshot: {effective_year_for_tabs}")
+        asset_kpi_cols = st.columns(4)
+        with asset_kpi_cols[0]:
+            kpi_card(
+                "Assets",
+                format_amount(asset_curr_total),
+                f"Overall<br>{format_yoy(asset_curr_total, asset_prev_total)}",
+                icon_svg("top", NCA_BLUE),
+                NCA_BLUE
+            )
+        with asset_kpi_cols[1]:
+            kpi_card(
+                "Top Category",
+                format_amount(top_asset_cat_amount) if top_asset_cat_amount is not None else "N/A",
+                f"{top_asset_cat_label}<br>{format_yoy(top_asset_cat_amount, top_asset_cat_prev_amount)}" if top_asset_cat_label else "N/A",
+                icon_svg("top", NCA_TEAL),
+                NCA_TEAL
+            )
+        with asset_kpi_cols[2]:
+            kpi_card(
+                "Largest Increase",
+                format_amount(asset_largest_increase_curr - asset_largest_increase_prev) if asset_largest_increase_label else "N/A",
+                f"{asset_largest_increase_label}<br>{format_yoy(asset_largest_increase_curr, asset_largest_increase_prev)}" if asset_largest_increase_label else "N/A",
+                icon_svg("up", NCA_PURPLE),
+                NCA_PURPLE
+            )
+        with asset_kpi_cols[3]:
+            kpi_card(
+                "Largest Decrease",
+                format_amount(asset_largest_decrease_curr - asset_largest_decrease_prev) if asset_largest_decrease_label else "N/A",
+                f"{asset_largest_decrease_label}<br>{format_yoy(asset_largest_decrease_curr, asset_largest_decrease_prev)}" if asset_largest_decrease_label else "N/A",
+                icon_svg("down", NCA_ORANGE),
+                NCA_ORANGE
+            )
+
+        section_header("FY Distribution", f"Distribution and top sub-categories for FY {effective_year_for_tabs}.")
         snap_left, snap_right = st.columns(2)
         with snap_left:
             asset_cat = assets_filtered.groupby("Category")["Amount"].sum().reset_index()
@@ -999,7 +1352,95 @@ elif active == "Assets":
 
 elif active == "Liabilities":
     if not comparison_mode:
-        section_header("FY Snapshot", f"Distribution and top sub-categories for FY {effective_year_for_tabs}.")
+        liab_prev_year = get_prev_year(effective_year_for_tabs, all_years)
+        liab_prev_df = liabilities[liabilities["Financial Year"] == liab_prev_year] if liab_prev_year else pd.DataFrame()
+        liab_curr_total = liab_filtered["Amount"].sum()
+        liab_prev_total = liab_prev_df["Amount"].sum() if not liab_prev_df.empty else None
+
+        liab_cat = liab_filtered.groupby(["Category"])["Amount"].sum().reset_index()
+        prev_liab_cat = (
+            liab_prev_df.groupby(["Category"])["Amount"].sum().reset_index()
+            if not liab_prev_df.empty else pd.DataFrame(columns=["Category", "Amount"])
+        )
+
+        top_liab_cat_label = None
+        top_liab_cat_amount = None
+        top_liab_cat_prev_amount = None
+        if not liab_cat.empty:
+            top_liab_cat_row = liab_cat.sort_values("Amount", ascending=False).iloc[0]
+            top_liab_cat_label = f"{top_liab_cat_row['Category']}"
+            top_liab_cat_amount = top_liab_cat_row["Amount"]
+            if not prev_liab_cat.empty:
+                top_liab_cat_prev_amount = prev_liab_cat[prev_liab_cat["Category"] == top_liab_cat_row["Category"]]["Amount"].sum()
+
+        liab_subcat = liab_filtered.groupby(["Category", "SubCategory"])["Amount"].sum().reset_index()
+        prev_liab_subcat = (
+            liab_prev_df.groupby(["Category", "SubCategory"])["Amount"].sum().reset_index()
+            if not liab_prev_df.empty else pd.DataFrame(columns=["Category", "SubCategory", "Amount"])
+        )
+
+        liab_subcat_delta = None
+        if not liab_subcat.empty and not prev_liab_subcat.empty:
+            liab_subcat_delta = liab_subcat.merge(
+                prev_liab_subcat, on=["Category", "SubCategory"], how="left", suffixes=("_curr", "_prev")
+            )
+            liab_subcat_delta["Amount_prev"] = liab_subcat_delta["Amount_prev"].fillna(0)
+            liab_subcat_delta["Delta"] = liab_subcat_delta["Amount_curr"] - liab_subcat_delta["Amount_prev"]
+
+        liab_largest_increase_label = None
+        liab_largest_increase_curr = None
+        liab_largest_increase_prev = None
+        liab_largest_decrease_label = None
+        liab_largest_decrease_curr = None
+        liab_largest_decrease_prev = None
+
+        if liab_subcat_delta is not None and not liab_subcat_delta.empty:
+            inc_row = liab_subcat_delta.sort_values("Delta", ascending=False).iloc[0]
+            liab_largest_increase_label = f"{inc_row['SubCategory']}"
+            liab_largest_increase_curr = inc_row["Amount_curr"]
+            liab_largest_increase_prev = inc_row["Amount_prev"]
+
+            dec_row = liab_subcat_delta.sort_values("Delta", ascending=True).iloc[0]
+            liab_largest_decrease_label = f"{dec_row['SubCategory']}"
+            liab_largest_decrease_curr = dec_row["Amount_curr"]
+            liab_largest_decrease_prev = dec_row["Amount_prev"]
+
+        st.markdown(f"#### FY Snapshot: {effective_year_for_tabs}")
+        liab_kpi_cols = st.columns(4)
+        with liab_kpi_cols[0]:
+            kpi_card(
+                "Liabilities",
+                format_amount(liab_curr_total),
+                f"Overall<br>{format_yoy(liab_curr_total, liab_prev_total)}",
+                icon_svg("down", "#64748B"),
+                "#64748B"
+            )
+        with liab_kpi_cols[1]:
+            kpi_card(
+                "Top Category",
+                format_amount(top_liab_cat_amount) if top_liab_cat_amount is not None else "N/A",
+                f"{top_liab_cat_label}<br>{format_yoy(top_liab_cat_amount, top_liab_cat_prev_amount)}" if top_liab_cat_label else "N/A",
+                icon_svg("top", NCA_TEAL),
+                NCA_TEAL
+            )
+        with liab_kpi_cols[2]:
+            kpi_card(
+                "Largest Increase",
+                format_amount(liab_largest_increase_curr - liab_largest_increase_prev) if liab_largest_increase_label else "N/A",
+                f"{liab_largest_increase_label}<br>{format_yoy(liab_largest_increase_curr, liab_largest_increase_prev)}" if liab_largest_increase_label else "N/A",
+                icon_svg("up", NCA_PURPLE),
+                NCA_PURPLE
+            )
+        with liab_kpi_cols[3]:
+            kpi_card(
+                "Largest Decrease",
+                format_amount(liab_largest_decrease_curr - liab_largest_decrease_prev) if liab_largest_decrease_label else "N/A",
+                f"{liab_largest_decrease_label}<br>{format_yoy(liab_largest_decrease_curr, liab_largest_decrease_prev)}" if liab_largest_decrease_label else "N/A",
+                icon_svg("down", NCA_ORANGE),
+                NCA_ORANGE
+            )
+
+        section_header("FY Distribution", f"Distribution and top sub-categories for FY {effective_year_for_tabs}.")
         snap_left, snap_right = st.columns(2)
         with snap_left:
             liab_cat = liab_filtered.groupby("Category")["Amount"].sum().reset_index()
@@ -1158,3 +1599,4 @@ st.markdown(f"""
         <span>FOR INTERNAL USE ONLY</span>
     </div>
 """, unsafe_allow_html=True)
+
