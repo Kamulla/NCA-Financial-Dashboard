@@ -283,13 +283,6 @@ if 'selected_year' not in st.session_state:
 
 # --- 4. Sidebar (NCA Branded Navigation) ---
 with st.sidebar:
-    # NCA Logo Integration
-    try:
-        st.image("assets/nca-logo.png", width=300)
-    except:
-        st.markdown(f"## NCA FINANCE")
-
-    st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("<div class='menu-title'>NAVIGATION</div>", unsafe_allow_html=True)
     st.markdown("<div class='menu-separator'></div>", unsafe_allow_html=True)
 
@@ -343,10 +336,17 @@ with st.sidebar:
     """, unsafe_allow_html=True)
 
 # --- 5. Integrated Header & Filter Logic ---
-st.markdown(
-    f"<h2 class='main-header'>NATIONAL CONSTRUCTION AUTHORITY FINANCIAL ANALYSIS</h2>"
-    f"<div class='main-subtitle'>Summary Financial Analysis over the period FY 2012/2013 - 2024/2025</div>",
-    unsafe_allow_html=True)
+header_logo_col, header_text_col = st.columns([1, 4])
+with header_logo_col:
+    try:
+        st.image("assets/nca-logo.png", width=400)
+    except:
+        st.markdown("## NCA")
+with header_text_col:
+    st.markdown(
+        f"<h2 class='main-header' style='text-align:left; margin-top:-6px; margin-bottom:6px;'>NATIONAL CONSTRUCTION AUTHORITY FINANCIAL ANALYSIS</h2>"
+        f"<div class='main-subtitle' style='text-align:left; margin-top:-14px;'>Summary Financial Analysis over the period FY 2012/2013 - 2024/2025</div>",
+        unsafe_allow_html=True)
 
 header_col, filter_col = st.columns([1.5, 1])
 
@@ -478,6 +478,12 @@ def render_comparison(title, years, chart_builder):
                     st.info(f"No data for {year}")
 
 
+def section_header(title, subtitle=None):
+    st.markdown(f"### {title}")
+    if subtitle:
+        st.caption(subtitle)
+
+
 # --- 7. Tab Rendering ---
 active = st.session_state.active_tab
 
@@ -542,43 +548,22 @@ if active == "Overview":
                                  color_discrete_sequence=[NCA_ORANGE, NCA_BLUE, "#64748B", "#CBD5E1"])
                 st.plotly_chart(apply_executive_style(fig_exp), use_container_width=True)
 
+            st.markdown(f"#### Balance Sheet Composition: FY {base_year}")
+            al, ar = st.columns(2)
+            with al:
+                fig_ast = px.pie(assets_filtered.groupby("Category")["Amount"].sum().reset_index(),
+                                 names="Category", values="Amount", hole=0.7, title="Assets Allocation",
+                                 color_discrete_sequence=[NCA_BLUE, NCA_ORANGE, "#334155", "#94A3B8"])
+                st.plotly_chart(apply_executive_style(fig_ast), use_container_width=True)
+            with ar:
+                fig_liab = px.pie(liab_filtered.groupby("Category")["Amount"].sum().reset_index(),
+                                  names="Category", values="Amount", hole=0.7, title="Liabilities Profile",
+                                  color_discrete_sequence=[NCA_ORANGE, NCA_BLUE, "#64748B", "#CBD5E1"])
+                st.plotly_chart(apply_executive_style(fig_liab), use_container_width=True)
+
 elif active == "Income":
-    st.markdown("#### Revenue Streams")
-    if not comparison_mode:
-        data = income_filtered.groupby("Category")["Amount"].sum().reset_index()
-        fig = px.pie(data, names="Category", values="Amount", hole=0.6,
-                     color_discrete_map=INCOME_COLOR_MAP,
-                     category_orders=INCOME_CATEGORY_ORDER,
-                     title=f"Income Distribution - {effective_year_for_tabs}")
-        st.plotly_chart(apply_executive_style(fig), use_container_width=True)
-
-        income_subcat = income_filtered.groupby(["Category", "SubCategory"])["Amount"].sum().reset_index()
-        income_subcat = income_subcat[income_subcat["Amount"] > 0]
-        income_subcat = income_subcat.sort_values(["Category", "Amount"], ascending=[True, False]) \
-                                     .groupby("Category", as_index=False).head(3)
-        if not income_subcat.empty:
-            income_subcat["Label"] = income_subcat["SubCategory"]
-            income_subcat["AmountLabel"] = income_subcat["Amount"].apply(
-                lambda v: f"{v / 1_000_000_000:.2f}B" if abs(v) >= 1_000_000_000 else f"{v / 1_000_000:.2f}M"
-            )
-            fig_bar = px.bar(
-                income_subcat.sort_values("Amount"),
-                x="Amount",
-                y="Label",
-                color="Category",
-                orientation="h",
-                color_discrete_map=INCOME_COLOR_MAP,
-                category_orders=INCOME_CATEGORY_ORDER,
-                text="AmountLabel",
-                title="Revenue by Sub-Category (Top Earners)"
-            )
-            fig_bar.update_traces(texttemplate="%{text}", textposition="outside")
-            fig_bar.update_layout(showlegend=False)
-            fig_bar.update_layout(yaxis_title="", xaxis_title="Amount")
-            st.plotly_chart(apply_executive_style(fig_bar), use_container_width=True)
-
     if comparison_mode:
-        st.markdown("#### Revenue Comparison")
+        section_header("Revenue Comparison", "Side-by-side FY distributions and top sub-categories.")
         for i in range(0, len(compare_years), 3):
             row_years = compare_years[i:i + 3]
             cols = st.columns(len(row_years))
@@ -622,47 +607,195 @@ elif active == "Income":
                         fig_bar.update_layout(showlegend=False)
                         fig_bar.update_layout(yaxis_title="", xaxis_title="Amount")
                         st.plotly_chart(apply_executive_style(fig_bar), use_container_width=True)
+    else:
+        section_header("FY Snapshot", f"Distribution and top sub-categories for FY {effective_year_for_tabs}.")
+        snap_left, snap_right = st.columns(2)
+        with snap_left:
+            data = income_filtered.groupby("Category")["Amount"].sum().reset_index()
+            fig = px.pie(data, names="Category", values="Amount", hole=0.6,
+                         color_discrete_map=INCOME_COLOR_MAP,
+                         category_orders=INCOME_CATEGORY_ORDER,
+                         title=f"Income Distribution - {effective_year_for_tabs}")
+            st.plotly_chart(apply_executive_style(fig), use_container_width=True)
+
+        with snap_right:
+            income_subcat = income_filtered.groupby(["Category", "SubCategory"])["Amount"].sum().reset_index()
+            income_subcat = income_subcat[income_subcat["Amount"] > 0]
+            income_subcat = income_subcat.sort_values(["Category", "Amount"], ascending=[True, False]) \
+                                         .groupby("Category", as_index=False).head(3)
+            if not income_subcat.empty:
+                income_subcat["Label"] = income_subcat["SubCategory"]
+                income_subcat["AmountLabel"] = income_subcat["Amount"].apply(
+                    lambda v: f"{v / 1_000_000_000:.2f}B" if abs(v) >= 1_000_000_000 else f"{v / 1_000_000:.2f}M"
+                )
+                fig_bar = px.bar(
+                    income_subcat.sort_values("Amount"),
+                    x="Amount",
+                    y="Label",
+                    color="Category",
+                    orientation="h",
+                    color_discrete_map=INCOME_COLOR_MAP,
+                    category_orders=INCOME_CATEGORY_ORDER,
+                    text="AmountLabel",
+                    title="Revenue by Sub-Category (Top Earners)"
+                )
+                fig_bar.update_traces(texttemplate="%{text}", textposition="outside")
+                fig_bar.update_layout(showlegend=False)
+                fig_bar.update_layout(yaxis_title="", xaxis_title="Amount")
+                st.plotly_chart(apply_executive_style(fig_bar), use_container_width=True)
+
+        st.markdown("---")
+        section_header("Trend Explorer", "Compare categories or sub-categories across the full time period.")
+        trend_col1, trend_col2 = st.columns([1, 2])
+        with trend_col1:
+            trend_level = st.selectbox(
+                "Trend Level",
+                ["Category", "Sub-Category"],
+                key="income_trend_level"
+            )
+        with trend_col2:
+            if trend_level == "Category":
+                trend_source = income.dropna(subset=["Category"])
+                trend_items = sorted(trend_source["Category"].unique())
+                trend_data = trend_source.groupby(["Financial Year", "Category"])["Amount"].sum().reset_index()
+                trend_data["Item"] = trend_data["Category"]
+                default_items = (
+                    trend_source.groupby("Category")["Amount"].sum()
+                    .sort_values(ascending=False).head(3).index.tolist()
+                )
+                color_map = {item: INCOME_COLOR_MAP.get(item, NCA_BLUE) for item in trend_items}
+            else:
+                trend_source = income.dropna(subset=["Category", "SubCategory"]).copy()
+                trend_source["Item"] = trend_source["Category"].astype(str) + " - " + trend_source["SubCategory"].astype(str)
+                trend_items = sorted(trend_source["Item"].unique())
+                trend_data = trend_source.groupby(["Financial Year", "Item"])["Amount"].sum().reset_index()
+                default_items = (
+                    trend_source.groupby("Item")["Amount"].sum()
+                    .sort_values(ascending=False).head(4).index.tolist()
+                )
+                palette = px.colors.qualitative.Safe
+                color_map = {item: palette[i % len(palette)] for i, item in enumerate(trend_items)}
+
+            selected_items = st.multiselect(
+                "Compare Items (add multiple)",
+                options=trend_items,
+                default=default_items,
+                key="income_trend_items"
+            )
+
+        if selected_items:
+            trend_filtered = trend_data[trend_data["Item"].isin(selected_items)]
+            fig_trend = px.line(
+                trend_filtered,
+                x="Financial Year",
+                y="Amount",
+                color="Item",
+                markers=True,
+                color_discrete_map=color_map,
+                title="Income Trend Over Time"
+            )
+            st.plotly_chart(apply_executive_style(fig_trend), use_container_width=True)
+        else:
+            st.info("Select at least one item to view the trend.")
 
 elif active == "Expenditure":
-    st.markdown("#### Cost Structures")
     if not comparison_mode:
-        fig_exp = px.pie(exp_filtered.groupby("Category")["Amount"].sum().reset_index(),
-                         names="Category", values="Amount", hole=0.6, title=f"Operational Spend - {effective_year_for_tabs}",
-                         color_discrete_map=EXP_COLOR_MAP,
-                         category_orders=EXP_CATEGORY_ORDER)
-        st.plotly_chart(apply_executive_style(fig_exp), use_container_width=True)
+        section_header("FY Snapshot", f"Distribution and top sub-categories for FY {effective_year_for_tabs}.")
+        snap_left, snap_right = st.columns(2)
+        with snap_left:
+            fig_exp = px.pie(exp_filtered.groupby("Category")["Amount"].sum().reset_index(),
+                             names="Category", values="Amount", hole=0.6, title=f"Operational Spend - {effective_year_for_tabs}",
+                             color_discrete_map=EXP_COLOR_MAP,
+                             category_orders=EXP_CATEGORY_ORDER)
+            st.plotly_chart(apply_executive_style(fig_exp), use_container_width=True)
 
-        exp_subcat = exp_filtered.groupby(["Category", "SubCategory"])["Amount"].sum().reset_index()
-        exp_subcat = exp_subcat[exp_subcat["Amount"] > 0]
-        exp_subcat = exp_subcat.sort_values("Amount", ascending=False).head(15)
-        if not exp_subcat.empty:
-            exp_subcat["Label"] = exp_subcat["SubCategory"]
-            exp_subcat["AmountLabel"] = exp_subcat["Amount"].apply(
-                lambda v: f"{v / 1_000_000_000:.2f}B" if abs(v) >= 1_000_000_000 else f"{v / 1_000_000:.2f}M"
+        with snap_right:
+            exp_subcat = exp_filtered.groupby(["Category", "SubCategory"])["Amount"].sum().reset_index()
+            exp_subcat = exp_subcat[exp_subcat["Amount"] > 0]
+            exp_subcat = exp_subcat.sort_values("Amount", ascending=False).head(15)
+            if not exp_subcat.empty:
+                exp_subcat["Label"] = exp_subcat["SubCategory"]
+                exp_subcat["AmountLabel"] = exp_subcat["Amount"].apply(
+                    lambda v: f"{v / 1_000_000_000:.2f}B" if abs(v) >= 1_000_000_000 else f"{v / 1_000_000:.2f}M"
+                )
+                exp_subcat_sorted = exp_subcat.sort_values("Amount", ascending=False)
+                fig_exp_sub = px.bar(
+                    exp_subcat_sorted,
+                    x="Amount",
+                    y="Label",
+                    color="Category",
+                    orientation="h",
+                    color_discrete_map=EXP_COLOR_MAP,
+                    category_orders=EXP_CATEGORY_ORDER,
+                    text="AmountLabel",
+                    title="Expenditure by Sub-Category (Top Spend)"
+                )
+                fig_exp_sub.update_traces(texttemplate="%{text}", textposition="outside")
+                fig_exp_sub.update_layout(showlegend=False)
+                fig_exp_sub.update_layout(
+                    yaxis_title="",
+                    xaxis_title="Amount",
+                    yaxis=dict(categoryorder="array", categoryarray=exp_subcat_sorted["Label"].tolist(), autorange="reversed"),
+                    margin=dict(l=80, r=80, t=80, b=60)
+                )
+                st.plotly_chart(apply_executive_style(fig_exp_sub), use_container_width=True)
+
+        st.markdown("---")
+        section_header("Trend Explorer", "Compare categories or sub-categories across the full time period.")
+        trend_col1, trend_col2 = st.columns([1, 2])
+        with trend_col1:
+            trend_level = st.selectbox(
+                "Trend Level",
+                ["Category", "Sub-Category"],
+                key="exp_trend_level"
             )
-            exp_subcat_sorted = exp_subcat.sort_values("Amount", ascending=False)
-            fig_exp_sub = px.bar(
-                exp_subcat_sorted,
-                x="Amount",
-                y="Label",
-                color="Category",
-                orientation="h",
-                color_discrete_map=EXP_COLOR_MAP,
-                category_orders=EXP_CATEGORY_ORDER,
-                text="AmountLabel",
-                title="Expenditure by Sub-Category (Top Spend)"
+        with trend_col2:
+            if trend_level == "Category":
+                trend_source = expenditure.dropna(subset=["Category"])
+                trend_items = sorted(trend_source["Category"].unique())
+                trend_data = trend_source.groupby(["Financial Year", "Category"])["Amount"].sum().reset_index()
+                trend_data["Item"] = trend_data["Category"]
+                default_items = (
+                    trend_source.groupby("Category")["Amount"].sum()
+                    .sort_values(ascending=False).head(3).index.tolist()
+                )
+                color_map = {item: EXP_COLOR_MAP.get(item, NCA_BLUE) for item in trend_items}
+            else:
+                trend_source = expenditure.dropna(subset=["Category", "SubCategory"]).copy()
+                trend_source["Item"] = trend_source["Category"].astype(str) + " - " + trend_source["SubCategory"].astype(str)
+                trend_items = sorted(trend_source["Item"].unique())
+                trend_data = trend_source.groupby(["Financial Year", "Item"])["Amount"].sum().reset_index()
+                default_items = (
+                    trend_source.groupby("Item")["Amount"].sum()
+                    .sort_values(ascending=False).head(4).index.tolist()
+                )
+                palette = px.colors.qualitative.Safe
+                color_map = {item: palette[i % len(palette)] for i, item in enumerate(trend_items)}
+
+            selected_items = st.multiselect(
+                "Compare Items (add multiple)",
+                options=trend_items,
+                default=default_items,
+                key="exp_trend_items"
             )
-            fig_exp_sub.update_traces(texttemplate="%{text}", textposition="outside")
-            fig_exp_sub.update_layout(showlegend=False)
-            fig_exp_sub.update_layout(
-                yaxis_title="",
-                xaxis_title="Amount",
-                yaxis=dict(categoryorder="array", categoryarray=exp_subcat_sorted["Label"].tolist(), autorange="reversed"),
-                margin=dict(l=80, r=80, t=80, b=60)
+
+        if selected_items:
+            trend_filtered = trend_data[trend_data["Item"].isin(selected_items)]
+            fig_trend = px.line(
+                trend_filtered,
+                x="Financial Year",
+                y="Amount",
+                color="Item",
+                markers=True,
+                color_discrete_map=color_map,
+                title="Expenditure Trend Over Time"
             )
-            st.plotly_chart(apply_executive_style(fig_exp_sub), use_container_width=True)
+            st.plotly_chart(apply_executive_style(fig_trend), use_container_width=True)
+        else:
+            st.info("Select at least one item to view the trend.")
+
     if comparison_mode:
-        st.markdown("#### Expenditure Benchmarking")
+        section_header("Expenditure Benchmarking", "Side-by-side FY distributions and top sub-categories.")
         for i in range(0, len(compare_years), 3):
             row_years = compare_years[i:i + 3]
             cols = st.columns(len(row_years))
@@ -712,51 +845,109 @@ elif active == "Expenditure":
                         st.plotly_chart(apply_executive_style(fig_exp_sub), use_container_width=True)
 
 elif active == "Assets":
-    st.markdown("#### Asset Portfolio")
     if not comparison_mode:
-        asset_cat = assets_filtered.groupby("Category")["Amount"].sum().reset_index()
-        fig_assets = px.pie(
-            asset_cat,
-            names="Category",
-            values="Amount",
-            hole=0.6,
-            title=f"Asset Categories - {effective_year_for_tabs}",
-            color_discrete_map=EXP_COLOR_MAP,
-            category_orders=EXP_CATEGORY_ORDER,
-        )
-        st.plotly_chart(apply_executive_style(fig_assets), use_container_width=True)
-
-        asset_subcat = assets_filtered.groupby(["Category", "SubCategory"])["Amount"].sum().reset_index()
-        asset_subcat = asset_subcat[asset_subcat["Amount"] > 0]
-        asset_subcat = asset_subcat.sort_values("Amount", ascending=False).head(15)
-        if not asset_subcat.empty:
-            asset_subcat["Label"] = asset_subcat["SubCategory"]
-            asset_subcat["AmountLabel"] = asset_subcat["Amount"].apply(
-                lambda v: f"{v / 1_000_000_000:.2f}B" if abs(v) >= 1_000_000_000 else f"{v / 1_000_000:.2f}M"
-            )
-            asset_subcat_sorted = asset_subcat.sort_values("Amount", ascending=False)
-            fig_asset_sub = px.bar(
-                asset_subcat_sorted,
-                x="Amount",
-                y="Label",
-                color="Category",
-                orientation="h",
+        section_header("FY Snapshot", f"Distribution and top sub-categories for FY {effective_year_for_tabs}.")
+        snap_left, snap_right = st.columns(2)
+        with snap_left:
+            asset_cat = assets_filtered.groupby("Category")["Amount"].sum().reset_index()
+            fig_assets = px.pie(
+                asset_cat,
+                names="Category",
+                values="Amount",
+                hole=0.6,
+                title=f"Asset Categories - {effective_year_for_tabs}",
                 color_discrete_map=EXP_COLOR_MAP,
                 category_orders=EXP_CATEGORY_ORDER,
-                text="AmountLabel",
-                title="Assets by Sub-Category (Top Holdings)"
             )
-            fig_asset_sub.update_traces(texttemplate="%{text}", textposition="outside")
-            fig_asset_sub.update_layout(showlegend=False)
-            fig_asset_sub.update_layout(
-                yaxis_title="",
-                xaxis_title="Amount",
-                yaxis=dict(categoryorder="array", categoryarray=asset_subcat_sorted["Label"].tolist(), autorange="reversed"),
-                margin=dict(l=80, r=80, t=80, b=60)
+            st.plotly_chart(apply_executive_style(fig_assets), use_container_width=True)
+
+        with snap_right:
+            asset_subcat = assets_filtered.groupby(["Category", "SubCategory"])["Amount"].sum().reset_index()
+            asset_subcat = asset_subcat[asset_subcat["Amount"] > 0]
+            asset_subcat = asset_subcat.sort_values("Amount", ascending=False).head(15)
+            if not asset_subcat.empty:
+                asset_subcat["Label"] = asset_subcat["SubCategory"]
+                asset_subcat["AmountLabel"] = asset_subcat["Amount"].apply(
+                    lambda v: f"{v / 1_000_000_000:.2f}B" if abs(v) >= 1_000_000_000 else f"{v / 1_000_000:.2f}M"
+                )
+                asset_subcat_sorted = asset_subcat.sort_values("Amount", ascending=False)
+                fig_asset_sub = px.bar(
+                    asset_subcat_sorted,
+                    x="Amount",
+                    y="Label",
+                    color="Category",
+                    orientation="h",
+                    color_discrete_map=EXP_COLOR_MAP,
+                    category_orders=EXP_CATEGORY_ORDER,
+                    text="AmountLabel",
+                    title="Assets by Sub-Category (Top Holdings)"
+                )
+                fig_asset_sub.update_traces(texttemplate="%{text}", textposition="outside")
+                fig_asset_sub.update_layout(showlegend=False)
+                fig_asset_sub.update_layout(
+                    yaxis_title="",
+                    xaxis_title="Amount",
+                    yaxis=dict(categoryorder="array", categoryarray=asset_subcat_sorted["Label"].tolist(), autorange="reversed"),
+                    margin=dict(l=80, r=80, t=80, b=60)
+                )
+                st.plotly_chart(apply_executive_style(fig_asset_sub), use_container_width=True)
+
+        st.markdown("---")
+        section_header("Trend Explorer", "Compare categories or sub-categories across the full time period.")
+        trend_col1, trend_col2 = st.columns([1, 2])
+        with trend_col1:
+            trend_level = st.selectbox(
+                "Trend Level",
+                ["Category", "Sub-Category"],
+                key="asset_trend_level"
             )
-            st.plotly_chart(apply_executive_style(fig_asset_sub), use_container_width=True)
+        with trend_col2:
+            if trend_level == "Category":
+                trend_source = assets.dropna(subset=["Category"])
+                trend_items = sorted(trend_source["Category"].unique())
+                trend_data = trend_source.groupby(["Financial Year", "Category"])["Amount"].sum().reset_index()
+                trend_data["Item"] = trend_data["Category"]
+                default_items = (
+                    trend_source.groupby("Category")["Amount"].sum()
+                    .sort_values(ascending=False).head(3).index.tolist()
+                )
+                color_map = {item: EXP_COLOR_MAP.get(item, NCA_BLUE) for item in trend_items}
+            else:
+                trend_source = assets.dropna(subset=["Category", "SubCategory"]).copy()
+                trend_source["Item"] = trend_source["Category"].astype(str) + " - " + trend_source["SubCategory"].astype(str)
+                trend_items = sorted(trend_source["Item"].unique())
+                trend_data = trend_source.groupby(["Financial Year", "Item"])["Amount"].sum().reset_index()
+                default_items = (
+                    trend_source.groupby("Item")["Amount"].sum()
+                    .sort_values(ascending=False).head(4).index.tolist()
+                )
+                palette = px.colors.qualitative.Safe
+                color_map = {item: palette[i % len(palette)] for i, item in enumerate(trend_items)}
+
+            selected_items = st.multiselect(
+                "Compare Items (add multiple)",
+                options=trend_items,
+                default=default_items,
+                key="asset_trend_items"
+            )
+
+        if selected_items:
+            trend_filtered = trend_data[trend_data["Item"].isin(selected_items)]
+            fig_trend = px.line(
+                trend_filtered,
+                x="Financial Year",
+                y="Amount",
+                color="Item",
+                markers=True,
+                color_discrete_map=color_map,
+                title="Assets Trend Over Time"
+            )
+            st.plotly_chart(apply_executive_style(fig_trend), use_container_width=True)
+        else:
+            st.info("Select at least one item to view the trend.")
+
     if comparison_mode:
-        st.markdown("#### Asset Comparison")
+        section_header("Asset Comparison", "Side-by-side FY distributions and top sub-categories.")
         for i in range(0, len(compare_years), 3):
             row_years = compare_years[i:i + 3]
             cols = st.columns(len(row_years))
@@ -807,51 +998,109 @@ elif active == "Assets":
                         st.plotly_chart(apply_executive_style(fig_asset_sub), use_container_width=True)
 
 elif active == "Liabilities":
-    st.markdown("#### Liabilities & Obligations")
     if not comparison_mode:
-        liab_cat = liab_filtered.groupby("Category")["Amount"].sum().reset_index()
-        fig_liab = px.pie(
-            liab_cat,
-            names="Category",
-            values="Amount",
-            hole=0.6,
-            title=f"Liabilities Categories - {effective_year_for_tabs}",
-            color_discrete_map=EXP_COLOR_MAP,
-            category_orders=EXP_CATEGORY_ORDER,
-        )
-        st.plotly_chart(apply_executive_style(fig_liab), use_container_width=True)
-
-        liab_subcat = liab_filtered.groupby(["Category", "SubCategory"])["Amount"].sum().reset_index()
-        liab_subcat = liab_subcat[liab_subcat["Amount"] > 0]
-        liab_subcat = liab_subcat.sort_values("Amount", ascending=False).head(10)
-        if not liab_subcat.empty:
-            liab_subcat["Label"] = liab_subcat["SubCategory"]
-            liab_subcat["AmountLabel"] = liab_subcat["Amount"].apply(
-                lambda v: f"{v / 1_000_000_000:.2f}B" if abs(v) >= 1_000_000_000 else f"{v / 1_000_000:.2f}M"
-            )
-            liab_subcat_sorted = liab_subcat.sort_values("Amount", ascending=False)
-            fig_liab_sub = px.bar(
-                liab_subcat_sorted,
-                x="Amount",
-                y="Label",
-                color="Category",
-                orientation="h",
+        section_header("FY Snapshot", f"Distribution and top sub-categories for FY {effective_year_for_tabs}.")
+        snap_left, snap_right = st.columns(2)
+        with snap_left:
+            liab_cat = liab_filtered.groupby("Category")["Amount"].sum().reset_index()
+            fig_liab = px.pie(
+                liab_cat,
+                names="Category",
+                values="Amount",
+                hole=0.6,
+                title=f"Liabilities Categories - {effective_year_for_tabs}",
                 color_discrete_map=EXP_COLOR_MAP,
                 category_orders=EXP_CATEGORY_ORDER,
-                text="AmountLabel",
-                title="Top Liabilities by Sub-Category"
             )
-            fig_liab_sub.update_traces(texttemplate="%{text}", textposition="outside")
-            fig_liab_sub.update_layout(showlegend=False)
-            fig_liab_sub.update_layout(
-                yaxis_title="",
-                xaxis_title="Amount",
-                yaxis=dict(categoryorder="array", categoryarray=liab_subcat_sorted["Label"].tolist(), autorange="reversed"),
-                margin=dict(l=80, r=80, t=80, b=60)
+            st.plotly_chart(apply_executive_style(fig_liab), use_container_width=True)
+
+        with snap_right:
+            liab_subcat = liab_filtered.groupby(["Category", "SubCategory"])["Amount"].sum().reset_index()
+            liab_subcat = liab_subcat[liab_subcat["Amount"] > 0]
+            liab_subcat = liab_subcat.sort_values("Amount", ascending=False).head(10)
+            if not liab_subcat.empty:
+                liab_subcat["Label"] = liab_subcat["SubCategory"]
+                liab_subcat["AmountLabel"] = liab_subcat["Amount"].apply(
+                    lambda v: f"{v / 1_000_000_000:.2f}B" if abs(v) >= 1_000_000_000 else f"{v / 1_000_000:.2f}M"
+                )
+                liab_subcat_sorted = liab_subcat.sort_values("Amount", ascending=False)
+                fig_liab_sub = px.bar(
+                    liab_subcat_sorted,
+                    x="Amount",
+                    y="Label",
+                    color="Category",
+                    orientation="h",
+                    color_discrete_map=EXP_COLOR_MAP,
+                    category_orders=EXP_CATEGORY_ORDER,
+                    text="AmountLabel",
+                    title="Top Liabilities by Sub-Category"
+                )
+                fig_liab_sub.update_traces(texttemplate="%{text}", textposition="outside")
+                fig_liab_sub.update_layout(showlegend=False)
+                fig_liab_sub.update_layout(
+                    yaxis_title="",
+                    xaxis_title="Amount",
+                    yaxis=dict(categoryorder="array", categoryarray=liab_subcat_sorted["Label"].tolist(), autorange="reversed"),
+                    margin=dict(l=80, r=80, t=80, b=60)
+                )
+                st.plotly_chart(apply_executive_style(fig_liab_sub), use_container_width=True)
+
+        st.markdown("---")
+        section_header("Trend Explorer", "Compare categories or sub-categories across the full time period.")
+        trend_col1, trend_col2 = st.columns([1, 2])
+        with trend_col1:
+            trend_level = st.selectbox(
+                "Trend Level",
+                ["Category", "Sub-Category"],
+                key="liab_trend_level"
             )
-            st.plotly_chart(apply_executive_style(fig_liab_sub), use_container_width=True)
+        with trend_col2:
+            if trend_level == "Category":
+                trend_source = liabilities.dropna(subset=["Category"])
+                trend_items = sorted(trend_source["Category"].unique())
+                trend_data = trend_source.groupby(["Financial Year", "Category"])["Amount"].sum().reset_index()
+                trend_data["Item"] = trend_data["Category"]
+                default_items = (
+                    trend_source.groupby("Category")["Amount"].sum()
+                    .sort_values(ascending=False).head(3).index.tolist()
+                )
+                color_map = {item: EXP_COLOR_MAP.get(item, NCA_BLUE) for item in trend_items}
+            else:
+                trend_source = liabilities.dropna(subset=["Category", "SubCategory"]).copy()
+                trend_source["Item"] = trend_source["Category"].astype(str) + " - " + trend_source["SubCategory"].astype(str)
+                trend_items = sorted(trend_source["Item"].unique())
+                trend_data = trend_source.groupby(["Financial Year", "Item"])["Amount"].sum().reset_index()
+                default_items = (
+                    trend_source.groupby("Item")["Amount"].sum()
+                    .sort_values(ascending=False).head(4).index.tolist()
+                )
+                palette = px.colors.qualitative.Safe
+                color_map = {item: palette[i % len(palette)] for i, item in enumerate(trend_items)}
+
+            selected_items = st.multiselect(
+                "Compare Items (add multiple)",
+                options=trend_items,
+                default=default_items,
+                key="liab_trend_items"
+            )
+
+        if selected_items:
+            trend_filtered = trend_data[trend_data["Item"].isin(selected_items)]
+            fig_trend = px.line(
+                trend_filtered,
+                x="Financial Year",
+                y="Amount",
+                color="Item",
+                markers=True,
+                color_discrete_map=color_map,
+                title="Liabilities Trend Over Time"
+            )
+            st.plotly_chart(apply_executive_style(fig_trend), use_container_width=True)
+        else:
+            st.info("Select at least one item to view the trend.")
+
     if comparison_mode:
-        st.markdown("#### Liabilities Comparison")
+        section_header("Liabilities Comparison", "Side-by-side FY distributions and top sub-categories.")
         for i in range(0, len(compare_years), 3):
             row_years = compare_years[i:i + 3]
             cols = st.columns(len(row_years))
@@ -909,4 +1158,3 @@ st.markdown(f"""
         <span>FOR INTERNAL USE ONLY</span>
     </div>
 """, unsafe_allow_html=True)
-
