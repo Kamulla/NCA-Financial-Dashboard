@@ -257,7 +257,7 @@ st.markdown(f"""
 
 # --- 3. Data Loading & Initial Logic ---
 app_last_updated = datetime.fromtimestamp(Path(__file__).stat().st_mtime).strftime("%Y-%m-%d %H:%M")
-income, expenditure, assets, liabilities = load_data()
+income, expenditure, assets, liabilities, cashflow = load_data()
 
 # Category color maps (consistent across charts)
 income_categories = sorted(income["Category"].dropna().unique())
@@ -276,7 +276,8 @@ all_years = sorted(
     set(income["Financial Year"].unique()) |
     set(expenditure["Financial Year"].unique()) |
     set(assets["Financial Year"].unique()) |
-    set(liabilities["Financial Year"].unique())
+    set(liabilities["Financial Year"].unique()) |
+    set(cashflow["Financial Year"].unique())
 )
 years_options = ["All Years"] + all_years
 
@@ -299,7 +300,7 @@ with st.sidebar:
 
 
     # Navigation Menu
-    nav_items = ["Overview", "Income", "Expenditure", "Assets", "Liabilities"]
+    nav_items = ["Overview", "Income", "Expenditure", "Assets", "Liabilities", "Cashflow", "Budget Performance"]
 
     for item in nav_items:
         is_active = st.session_state.active_tab == item
@@ -324,11 +325,7 @@ with st.sidebar:
                     <span style='color: white; font-size: 0.75rem; font-weight: 700;'>KES (KSh)</span>
                 </div>
                 <div style='display: flex; justify-content: space-between;'>
-                    <span style='color: rgba(255,255,255,0.6); font-size: 0.75rem;'>Denomination</span>
-                    <span style='color: white; font-size: 0.75rem; font-weight: 700;'>Millions/Billions</span>
-                </div>
-                <div style='display: flex; justify-content: space-between;'>
-                    <span style='color: rgba(255,255,255,0.6); font-size: 0.75rem;'>Status</span>
+                    <span style='color: rgba(255,255,255,0.6); font-size: 0.75rem;'>Source</span>
                     <span style='color: {NCA_ORANGE}; font-size: 0.75rem; font-weight: 700;'>Audited Accounts</span>
                 </div>
             </div>
@@ -875,6 +872,20 @@ elif active == "Income":
         else:
             st.info("Select at least one item to view the trend.")
 
+        st.markdown("---")
+        section_header("Income Detail Table", f"Category and sub-category snapshot for FY {effective_year_for_tabs}.")
+        income_table = income_filtered.groupby(["Category", "SubCategory"])["Amount"].sum().reset_index()
+        income_table = income_table.sort_values(["Category", "Amount"], ascending=[True, False])
+        st.dataframe(income_table, use_container_width=True)
+        csv_income = income_table.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            label="Download Income Snapshot (CSV)",
+            data=csv_income,
+            file_name=f"income_snapshot_FY_{effective_year_for_tabs}.csv",
+            mime="text/csv",
+            use_container_width=False
+        )
+
 elif active == "Expenditure":
     if not comparison_mode:
         exp_prev_year = get_prev_year(effective_year_for_tabs, all_years)
@@ -1058,6 +1069,20 @@ elif active == "Expenditure":
             st.plotly_chart(apply_executive_style(fig_trend), use_container_width=True)
         else:
             st.info("Select at least one item to view the trend.")
+
+        st.markdown("---")
+        section_header("Expenditure Detail Table", f"Category and sub-category snapshot for FY {effective_year_for_tabs}.")
+        exp_table = exp_filtered.groupby(["Category", "SubCategory"])["Amount"].sum().reset_index()
+        exp_table = exp_table.sort_values(["Category", "Amount"], ascending=[True, False])
+        st.dataframe(exp_table, use_container_width=True)
+        csv_exp = exp_table.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            label="Download Expenditure Snapshot (CSV)",
+            data=csv_exp,
+            file_name=f"expenditure_snapshot_FY_{effective_year_for_tabs}.csv",
+            mime="text/csv",
+            use_container_width=False
+        )
 
     if comparison_mode:
         section_header("Expenditure Benchmarking", "Side-by-side FY distributions and top sub-categories.")
@@ -1298,6 +1323,20 @@ elif active == "Assets":
             st.plotly_chart(apply_executive_style(fig_trend), use_container_width=True)
         else:
             st.info("Select at least one item to view the trend.")
+
+        st.markdown("---")
+        section_header("Assets Detail Table", f"Category and sub-category snapshot for FY {effective_year_for_tabs}.")
+        asset_table = assets_filtered.groupby(["Category", "SubCategory"])["Amount"].sum().reset_index()
+        asset_table = asset_table.sort_values(["Category", "Amount"], ascending=[True, False])
+        st.dataframe(asset_table, use_container_width=True)
+        csv_assets = asset_table.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            label="Download Assets Snapshot (CSV)",
+            data=csv_assets,
+            file_name=f"assets_snapshot_FY_{effective_year_for_tabs}.csv",
+            mime="text/csv",
+            use_container_width=False
+        )
 
     if comparison_mode:
         section_header("Asset Comparison", "Side-by-side FY distributions and top sub-categories.")
@@ -1540,6 +1579,20 @@ elif active == "Liabilities":
         else:
             st.info("Select at least one item to view the trend.")
 
+        st.markdown("---")
+        section_header("Liabilities Detail Table", f"Category and sub-category snapshot for FY {effective_year_for_tabs}.")
+        liab_table = liab_filtered.groupby(["Category", "SubCategory"])["Amount"].sum().reset_index()
+        liab_table = liab_table.sort_values(["Category", "Amount"], ascending=[True, False])
+        st.dataframe(liab_table, use_container_width=True)
+        csv_liab = liab_table.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            label="Download Liabilities Snapshot (CSV)",
+            data=csv_liab,
+            file_name=f"liabilities_snapshot_FY_{effective_year_for_tabs}.csv",
+            mime="text/csv",
+            use_container_width=False
+        )
+
     if comparison_mode:
         section_header("Liabilities Comparison", "Side-by-side FY distributions and top sub-categories.")
         for i in range(0, len(compare_years), 3):
@@ -1590,6 +1643,116 @@ elif active == "Liabilities":
                             margin=dict(l=80, r=80, t=80, b=60)
                         )
                         st.plotly_chart(apply_executive_style(fig_liab_sub), use_container_width=True)
+
+elif active == "Cashflow":
+    section_header("Cashflow", "Data coming soon.")
+    st.markdown("""
+        <div style='background: rgba(255,255,255,0.35); border: 1px dashed rgba(148,163,184,0.6);
+                    border-radius: 22px; padding: 26px; margin-top: 10px;'>
+            <div style='display:flex; align-items:center; justify-content:space-between; gap:16px;'>
+                <div>
+                    <div style='font-size:0.9rem; font-weight:700; letter-spacing:0.12em; color:#64748B;'>CASHFLOW MODULE</div>
+                    <div style='font-size:1.6rem; font-weight:800; color:#0F172A; margin-top:6px;'>Coming Soon</div>
+                    <div style='font-size:0.85rem; color:#64748B; margin-top:8px; max-width:560px;'>
+                        We are preparing the cashflow dataset and executive visuals. This area will include
+                        operating, investing, and financing cashflows, plus trend and coverage metrics.
+                    </div>
+                </div>
+                <div style='width:120px; height:120px; border-radius:18px; background: linear-gradient(135deg, rgba(0,112,192,0.15), rgba(247,148,29,0.18));
+                            border:1px solid rgba(148,163,184,0.5); display:grid; place-items:center;'>
+                    <div style='width:68px; height:68px; border-radius:12px; background: rgba(255,255,255,0.6);
+                                display:grid; place-items:center; border:1px solid rgba(148,163,184,0.4);'>
+                        <div style='font-size:28px; color:#64748B; font-weight:700;'>CF</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div style='display:grid; grid-template-columns:repeat(3, 1fr); gap:14px; margin-top:16px;'>
+            <div class='metric-card' style='min-height:140px; opacity:0.6;'>
+                <div class='status-bar'></div>
+                <div class='metric-title'>Operating Cashflow</div>
+                <div class='metric-value'>--</div>
+                <div class='metric-sub-value'>Awaiting dataset</div>
+            </div>
+            <div class='metric-card' style='min-height:140px; opacity:0.6;'>
+                <div class='status-bar'></div>
+                <div class='metric-title'>Investing Cashflow</div>
+                <div class='metric-value'>--</div>
+                <div class='metric-sub-value'>Awaiting dataset</div>
+            </div>
+            <div class='metric-card' style='min-height:140px; opacity:0.6;'>
+                <div class='status-bar'></div>
+                <div class='metric-title'>Financing Cashflow</div>
+                <div class='metric-value'>--</div>
+                <div class='metric-sub-value'>Awaiting dataset</div>
+            </div>
+        </div>
+        <div style='margin-top:18px; padding:18px; border-radius:18px; background: rgba(255,255,255,0.35);
+                    border:1px solid rgba(148,163,184,0.5); color:#64748B;'>
+            <div style='font-size:0.75rem; font-weight:700; letter-spacing:0.12em; margin-bottom:6px;'>WHAT TO EXPECT</div>
+            <div style='display:flex; gap:14px; flex-wrap:wrap; font-size:0.85rem;'>
+                <div>Cashflow trend (all years)</div>
+                <div>Operating margin proxy</div>
+                <div>Capex intensity</div>
+                <div>Free cashflow bridge</div>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+
+elif active == "Budget Performance":
+    section_header("Budget Performance", "Data coming soon.")
+    st.markdown("""
+        <div style='background: rgba(255,255,255,0.35); border: 1px dashed rgba(148,163,184,0.6);
+                    border-radius: 22px; padding: 26px; margin-top: 10px;'>
+            <div style='display:flex; align-items:center; justify-content:space-between; gap:16px;'>
+                <div>
+                    <div style='font-size:0.9rem; font-weight:700; letter-spacing:0.12em; color:#64748B;'>BUDGET PERFORMANCE</div>
+                    <div style='font-size:1.6rem; font-weight:800; color:#0F172A; margin-top:6px;'>Coming Soon</div>
+                    <div style='font-size:0.85rem; color:#64748B; margin-top:8px; max-width:560px;'>
+                        This module will compare actuals to budget by category and sub-category, highlighting variances,
+                        under-spend and over-spend patterns, and fiscal discipline indicators.
+                    </div>
+                </div>
+                <div style='width:120px; height:120px; border-radius:18px; background: linear-gradient(135deg, rgba(99,102,241,0.15), rgba(247,148,29,0.18));
+                            border:1px solid rgba(148,163,184,0.5); display:grid; place-items:center;'>
+                    <div style='width:68px; height:68px; border-radius:12px; background: rgba(255,255,255,0.6);
+                                display:grid; place-items:center; border:1px solid rgba(148,163,184,0.4);'>
+                        <div style='font-size:24px; color:#64748B; font-weight:700;'>B/A</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div style='display:grid; grid-template-columns:repeat(3, 1fr); gap:14px; margin-top:16px;'>
+            <div class='metric-card' style='min-height:140px; opacity:0.6;'>
+                <div class='status-bar'></div>
+                <div class='metric-title'>Total Budget</div>
+                <div class='metric-value'>--</div>
+                <div class='metric-sub-value'>Awaiting dataset</div>
+            </div>
+            <div class='metric-card' style='min-height:140px; opacity:0.6;'>
+                <div class='status-bar'></div>
+                <div class='metric-title'>Total Actuals</div>
+                <div class='metric-value'>--</div>
+                <div class='metric-sub-value'>Awaiting dataset</div>
+            </div>
+            <div class='metric-card' style='min-height:140px; opacity:0.6;'>
+                <div class='status-bar'></div>
+                <div class='metric-title'>Variance</div>
+                <div class='metric-value'>--</div>
+                <div class='metric-sub-value'>Awaiting dataset</div>
+            </div>
+        </div>
+        <div style='margin-top:18px; padding:18px; border-radius:18px; background: rgba(255,255,255,0.35);
+                    border:1px solid rgba(148,163,184,0.5); color:#64748B;'>
+            <div style='font-size:0.75rem; font-weight:700; letter-spacing:0.12em; margin-bottom:6px;'>WHAT TO EXPECT</div>
+            <div style='display:flex; gap:14px; flex-wrap:wrap; font-size:0.85rem;'>
+                <div>Budget vs actual by category</div>
+                <div>Variance waterfall</div>
+                <div>Under/over spend highlights</div>
+                <div>Compliance against targets</div>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
 
 # --- 8. Board-Ready Footer ---
 st.markdown("<br><hr>", unsafe_allow_html=True)
