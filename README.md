@@ -2,8 +2,8 @@
 
 # NCA 10-Year Financial Performance Dashboard
 
-[![Python](https://img.shields.io/badge/Python-3.11-blue)](https://www.python.org/)
-[![Streamlit](https://img.shields.io/badge/Streamlit-1.26-orange)](https://streamlit.io/)
+[![Python](https://img.shields.io/badge/Python-3.14-blue)](https://www.python.org/)
+[![Streamlit](https://img.shields.io/badge/Streamlit-1.55.0-orange)](https://streamlit.io/)
 [![License](https://img.shields.io/badge/License-Internal-brightgreen)]()
 
 ## Overview
@@ -36,4 +36,5 @@ Hosted on **Streamlit Cloud**: [View Dashboard](https://nca-financial-dashboard-
 
 ## License
 Internal use by National Construction Authority. All rights reserved.
+
 
