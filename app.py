@@ -257,7 +257,7 @@ st.markdown(f"""
 
 # --- 3. Data Loading & Initial Logic ---
 app_last_updated = datetime.fromtimestamp(Path(__file__).stat().st_mtime).strftime("%Y-%m-%d %H:%M")
-income, expenditure, assets, liabilities, cashflow = load_data()
+income, expenditure, assets, liabilities, cashflow, budget_performance = load_data()
 
 # Category color maps (consistent across charts)
 income_categories = sorted(income["Category"].dropna().unique())
@@ -277,7 +277,8 @@ all_years = sorted(
     set(expenditure["Financial Year"].unique()) |
     set(assets["Financial Year"].unique()) |
     set(liabilities["Financial Year"].unique()) |
-    set(cashflow["Financial Year"].unique())
+    set(cashflow["Financial Year"].unique()) |
+    set(budget_performance["Financial Year"].unique())
 )
 years_options = ["All Years"] + all_years
 
@@ -1762,4 +1763,3 @@ st.markdown(f"""
         <span>FOR INTERNAL USE ONLY</span>
     </div>
 """, unsafe_allow_html=True)
-
