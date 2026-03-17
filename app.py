@@ -301,7 +301,7 @@ with st.sidebar:
 
 
     # Navigation Menu
-    nav_items = ["Overview", "Income", "Expenditure", "Assets", "Liabilities", "Cashflow", "Budget Performance"]
+    nav_items = ["Overview", "Income", "Expenditure", "Assets", "Liabilities", "Budget Performance", "Cashflow"]
 
     for item in nav_items:
         is_active = st.session_state.active_tab == item
@@ -420,6 +420,7 @@ income_filtered = income[income["Financial Year"] == effective_year_for_tabs]
 exp_filtered = expenditure[expenditure["Financial Year"] == effective_year_for_tabs]
 assets_filtered = assets[assets["Financial Year"] == effective_year_for_tabs]
 liab_filtered = liabilities[liabilities["Financial Year"] == effective_year_for_tabs]
+budget_filtered = budget_performance[budget_performance["Financial Year"] == effective_year_for_tabs]
 
 
 # --- 6. Executive UI Helpers ---
@@ -1701,59 +1702,244 @@ elif active == "Cashflow":
     """, unsafe_allow_html=True)
 
 elif active == "Budget Performance":
-    section_header("Budget Performance", "Data coming soon.")
-    st.markdown("""
-        <div style='background: rgba(255,255,255,0.35); border: 1px dashed rgba(148,163,184,0.6);
-                    border-radius: 22px; padding: 26px; margin-top: 10px;'>
-            <div style='display:flex; align-items:center; justify-content:space-between; gap:16px;'>
-                <div>
-                    <div style='font-size:0.9rem; font-weight:700; letter-spacing:0.12em; color:#64748B;'>BUDGET PERFORMANCE</div>
-                    <div style='font-size:1.6rem; font-weight:800; color:#0F172A; margin-top:6px;'>Coming Soon</div>
-                    <div style='font-size:0.85rem; color:#64748B; margin-top:8px; max-width:560px;'>
-                        This module will compare actuals to budget by category and sub-category, highlighting variances,
-                        under-spend and over-spend patterns, and fiscal discipline indicators.
-                    </div>
-                </div>
-                <div style='width:120px; height:120px; border-radius:18px; background: linear-gradient(135deg, rgba(99,102,241,0.15), rgba(247,148,29,0.18));
-                            border:1px solid rgba(148,163,184,0.5); display:grid; place-items:center;'>
-                    <div style='width:68px; height:68px; border-radius:12px; background: rgba(255,255,255,0.6);
-                                display:grid; place-items:center; border:1px solid rgba(148,163,184,0.4);'>
-                        <div style='font-size:24px; color:#64748B; font-weight:700;'>B/A</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div style='display:grid; grid-template-columns:repeat(3, 1fr); gap:14px; margin-top:16px;'>
-            <div class='metric-card' style='min-height:140px; opacity:0.6;'>
-                <div class='status-bar'></div>
-                <div class='metric-title'>Total Budget</div>
-                <div class='metric-value'>--</div>
-                <div class='metric-sub-value'>Awaiting dataset</div>
-            </div>
-            <div class='metric-card' style='min-height:140px; opacity:0.6;'>
-                <div class='status-bar'></div>
-                <div class='metric-title'>Total Actuals</div>
-                <div class='metric-value'>--</div>
-                <div class='metric-sub-value'>Awaiting dataset</div>
-            </div>
-            <div class='metric-card' style='min-height:140px; opacity:0.6;'>
-                <div class='status-bar'></div>
-                <div class='metric-title'>Variance</div>
-                <div class='metric-value'>--</div>
-                <div class='metric-sub-value'>Awaiting dataset</div>
-            </div>
-        </div>
-        <div style='margin-top:18px; padding:18px; border-radius:18px; background: rgba(255,255,255,0.35);
-                    border:1px solid rgba(148,163,184,0.5); color:#64748B;'>
-            <div style='font-size:0.75rem; font-weight:700; letter-spacing:0.12em; margin-bottom:6px;'>WHAT TO EXPECT</div>
-            <div style='display:flex; gap:14px; flex-wrap:wrap; font-size:0.85rem;'>
-                <div>Budget vs actual by category</div>
-                <div>Variance waterfall</div>
-                <div>Under/over spend highlights</div>
-                <div>Compliance against targets</div>
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
+    section_header("Budget Performance", f"Budget vs actual analysis for FY {effective_year_for_tabs}.")
+
+    budget_prev_df = (
+        budget_performance[budget_performance["Financial Year"] == prev_year]
+        if prev_year is not None else pd.DataFrame(columns=budget_performance.columns)
+    )
+
+    if {"Final Budget", "Actual"}.issubset(budget_filtered.columns):
+        budget_variance = budget_filtered["Actual"] - budget_filtered["Final Budget"]
+        budget_util = (budget_filtered["Actual"] / budget_filtered["Final Budget"]) * 100
+    else:
+        budget_variance = pd.Series(dtype="float64")
+        budget_util = pd.Series(dtype="float64")
+
+    if {"Final Budget", "Actual"}.issubset(budget_prev_df.columns):
+        prev_variance = budget_prev_df["Actual"] - budget_prev_df["Final Budget"]
+        prev_util = (budget_prev_df["Actual"] / budget_prev_df["Final Budget"]) * 100
+    else:
+        prev_variance = pd.Series(dtype="float64")
+        prev_util = pd.Series(dtype="float64")
+
+    category_series = budget_filtered["Category"].astype(str).str.lower() if "Category" in budget_filtered.columns else pd.Series(dtype="object")
+    revenue_mask = category_series.str.contains("revenue", na=False)
+    expenditure_mask = category_series.str.contains("expenditure|expense|capital|capex", na=False)
+
+    def summarize_budget_slice(df_slice):
+        if df_slice.empty or not {"Final Budget", "Actual"}.issubset(df_slice.columns):
+            return None, None, None
+        total_budget = df_slice["Final Budget"].sum()
+        total_actual = df_slice["Actual"].sum()
+        variance = total_actual - total_budget
+        utilization = (total_actual / total_budget * 100) if total_budget not in [0, None] else None
+        return variance, utilization, total_budget
+
+    rev_variance, rev_util, _ = summarize_budget_slice(budget_filtered[revenue_mask]) if not budget_filtered.empty else (None, None, None)
+    exp_variance, exp_util, _ = summarize_budget_slice(budget_filtered[expenditure_mask]) if not budget_filtered.empty else (None, None, None)
+
+    prev_category_series = budget_prev_df["Category"].astype(str).str.lower() if "Category" in budget_prev_df.columns else pd.Series(dtype="object")
+    prev_revenue_mask = prev_category_series.str.contains("revenue", na=False)
+    prev_expenditure_mask = prev_category_series.str.contains("expenditure|expense|capital|capex", na=False)
+    prev_rev_variance, prev_rev_util, _ = summarize_budget_slice(budget_prev_df[prev_revenue_mask]) if not budget_prev_df.empty else (None, None, None)
+    prev_exp_variance, prev_exp_util, _ = summarize_budget_slice(budget_prev_df[prev_expenditure_mask]) if not budget_prev_df.empty else (None, None, None)
+
+    kpi_cols = st.columns(4)
+    with kpi_cols[0]:
+        rev_color = "#10B981" if rev_variance is not None and rev_variance >= 0 else "#F43F5E"
+        kpi_card(
+            "Revenue Variance",
+            format_amount(rev_variance) if rev_variance is not None else "N/A",
+            f"Actual - Budget<br>{format_yoy(rev_variance, prev_rev_variance)}" if prev_year else "Actual - Budget",
+            icon_svg("up", rev_color),
+            rev_color
+        )
+    with kpi_cols[1]:
+        rev_util_color = "#10B981" if rev_util is not None and rev_util >= 100 else "#F59E0B"
+        kpi_card(
+            "Revenue Utilization",
+            f"{rev_util:.1f}%" if rev_util is not None else "N/A",
+            f"Actual / Budget<br>{format_yoy(rev_util, prev_rev_util)}" if prev_year else "Actual / Budget",
+            icon_svg("top", rev_util_color),
+            rev_util_color
+        )
+    with kpi_cols[2]:
+        exp_color = "#10B981" if exp_variance is not None and exp_variance <= 0 else "#F43F5E"
+        kpi_card(
+            "Expenditure Variance",
+            format_amount(exp_variance) if exp_variance is not None else "N/A",
+            f"Actual - Budget<br>{format_yoy(exp_variance, prev_exp_variance)}" if prev_year else "Actual - Budget",
+            icon_svg("up", exp_color),
+            exp_color
+        )
+    with kpi_cols[3]:
+        exp_util_color = "#10B981" if exp_util is not None and exp_util <= 100 else "#F59E0B"
+        kpi_card(
+            "Expenditure Utilization",
+            f"{exp_util:.1f}%" if exp_util is not None else "N/A",
+            f"Actual / Budget<br>{format_yoy(exp_util, prev_exp_util)}" if prev_year else "Actual / Budget",
+            icon_svg("top", exp_util_color),
+            exp_util_color
+        )
+
+    st.markdown("---")
+    section_header("Category Snapshot", "Budget vs actual by category and variance highlights.")
+
+    if budget_filtered.empty:
+        st.info("No budget performance data for the selected period.")
+    else:
+        budget_cat = (
+            budget_filtered
+            .groupby("Category")[["Final Budget", "Actual"]]
+            .sum()
+            .reset_index()
+        )
+        budget_cat["Variance"] = budget_cat["Actual"] - budget_cat["Final Budget"]
+        budget_cat["Utilization %"] = (budget_cat["Actual"] / budget_cat["Final Budget"]) * 100
+
+        chart_col1, chart_col2 = st.columns(2)
+        with chart_col1:
+            budget_melt = budget_cat.melt(
+                id_vars="Category",
+                value_vars=["Final Budget", "Actual"],
+                var_name="Metric",
+                value_name="Amount"
+            )
+            fig_budget = px.bar(
+                budget_melt,
+                x="Amount",
+                y="Category",
+                color="Metric",
+                orientation="h",
+                title="Budget vs Actual by Category",
+                color_discrete_map={"Final Budget": NCA_BLUE, "Actual": NCA_ORANGE}
+            )
+            fig_budget.update_layout(showlegend=True, yaxis_title="", xaxis_title="Amount")
+            st.plotly_chart(apply_executive_style(fig_budget), use_container_width=True)
+
+        with chart_col2:
+            variance_sorted = budget_cat.sort_values("Variance", ascending=True)
+            fig_var = px.bar(
+                variance_sorted,
+                x="Variance",
+                y="Category",
+                orientation="h",
+                title="Variance by Category (Actual - Budget)",
+                color="Variance",
+                color_continuous_scale=["#10B981", "#F59E0B", "#F43F5E"]
+            )
+            fig_var.update_layout(showlegend=False, yaxis_title="", xaxis_title="Variance")
+            st.plotly_chart(apply_executive_style(fig_var), use_container_width=True)
+
+        st.markdown("---")
+        section_header("Utilization", "Budget utilization percentage by category.")
+        util_sorted = budget_cat.sort_values("Utilization %", ascending=False)
+        fig_util = px.bar(
+            util_sorted,
+            x="Utilization %",
+            y="Category",
+            orientation="h",
+            title="Utilization % by Category",
+            color="Utilization %",
+            color_continuous_scale=["#0EA5A4", "#F59E0B", "#F43F5E"]
+        )
+        fig_util.update_layout(showlegend=False, yaxis_title="", xaxis_title="Utilization %")
+        st.plotly_chart(apply_executive_style(fig_util), use_container_width=True)
+
+        st.markdown("---")
+        section_header("Trend Explorer", "Compare budget, actuals, variance, or utilization across years.")
+        trend_col1, trend_col2, trend_col3 = st.columns([1, 1, 2])
+        with trend_col1:
+            trend_level = st.selectbox(
+                "Trend Level",
+                ["Category", "Sub-Category"],
+                key="budget_trend_level"
+            )
+        with trend_col2:
+            trend_metric = st.selectbox(
+                "Metric",
+                ["Actual", "Final Budget", "Variance", "Utilization %"],
+                key="budget_trend_metric"
+            )
+        with trend_col3:
+            trend_source = budget_performance.dropna(subset=["Category"]).copy()
+            if trend_level == "Sub-Category":
+                trend_source = trend_source.dropna(subset=["SubCategory"])
+                trend_source["Item"] = trend_source["Category"].astype(str) + " - " + trend_source["SubCategory"].astype(str)
+            else:
+                trend_source["Item"] = trend_source["Category"].astype(str)
+
+            if trend_metric in ["Actual", "Final Budget"]:
+                trend_data = (
+                    trend_source
+                    .groupby(["Financial Year", "Item"])[trend_metric]
+                    .sum()
+                    .reset_index()
+                    .rename(columns={trend_metric: "Value"})
+                )
+            elif trend_metric == "Variance":
+                grouped = trend_source.groupby(["Financial Year", "Item"])[["Actual", "Final Budget"]].sum().reset_index()
+                grouped["Value"] = grouped["Actual"] - grouped["Final Budget"]
+                trend_data = grouped[["Financial Year", "Item", "Value"]]
+            else:
+                grouped = trend_source.groupby(["Financial Year", "Item"])[["Actual", "Final Budget"]].sum().reset_index()
+                grouped["Value"] = (grouped["Actual"] / grouped["Final Budget"]) * 100
+                trend_data = grouped[["Financial Year", "Item", "Value"]]
+
+            trend_items = sorted(trend_source["Item"].unique())
+            default_items = (
+                trend_source.groupby("Item")["Actual"].sum()
+                .sort_values(ascending=False).head(4).index.tolist()
+                if "Actual" in trend_source.columns else trend_items[:4]
+            )
+
+            selected_items = st.multiselect(
+                "Compare Items (add multiple)",
+                options=trend_items,
+                default=default_items,
+                key="budget_trend_items"
+            )
+
+        if selected_items:
+            trend_filtered = trend_data[trend_data["Item"].isin(selected_items)]
+            if trend_level == "Category":
+                color_map = {item: build_category_color_map(trend_items).get(item, NCA_BLUE) for item in trend_items}
+            else:
+                palette = px.colors.qualitative.Safe
+                color_map = {item: palette[i % len(palette)] for i, item in enumerate(trend_items)}
+
+            fig_trend = px.line(
+                trend_filtered,
+                x="Financial Year",
+                y="Value",
+                color="Item",
+                markers=True,
+                color_discrete_map=color_map,
+                title=f"{trend_metric} Trend Over Time"
+            )
+            if trend_metric == "Utilization %":
+                fig_trend.update_yaxes(ticksuffix="%")
+            st.plotly_chart(apply_executive_style(fig_trend), use_container_width=True)
+        else:
+            st.info("Select at least one item to view the trend.")
+
+        st.markdown("---")
+        section_header("Budget Performance Detail", f"Category and sub-category snapshot for FY {effective_year_for_tabs}.")
+        budget_table = budget_filtered.copy()
+        if {"Final Budget", "Actual"}.issubset(budget_table.columns):
+            budget_table["Difference"] = budget_table["Actual"] - budget_table["Final Budget"]
+            budget_table["Percentage Utilization"] = (budget_table["Actual"] / budget_table["Final Budget"]) * 100
+        budget_table = budget_table.sort_values(["Category", "SubCategory"])
+        st.dataframe(budget_table, use_container_width=True)
+        csv_budget = budget_table.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            label="Download Budget Performance Snapshot (CSV)",
+            data=csv_budget,
+            file_name=f"budget_performance_FY_{effective_year_for_tabs}.csv",
+            mime="text/csv",
+            use_container_width=False
+        )
 
 # --- 8. Board-Ready Footer ---
 st.markdown("<br><hr>", unsafe_allow_html=True)
