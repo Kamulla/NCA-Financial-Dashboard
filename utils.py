@@ -14,9 +14,10 @@ def load_data():
         cashflow = pd.DataFrame(columns=["Financial Year", "Category", "SubCategory", "Amount"])
 
     try:
-        budget_performance = pd.read_excel(xls, "Budget Performance")
-    except ValueError:
-        budget_performance = pd.DataFrame(columns=["Financial Year", "Category", "SubCategory", "Amount"])
+        budget_perf_xls = pd.ExcelFile("data/Finance Research Budget Performance.xlsx")
+        budget_performance = pd.read_excel(budget_perf_xls, "Dataset")
+    except (ValueError, FileNotFoundError):
+        budget_performance = pd.DataFrame(columns=["Financial Year", "Category", "SubCategory", "Final Budget", "Actual"])
 
     # Clean column names (remove hidden spaces)
     for df in [income, expenditure, assets, liabilities, cashflow, budget_performance]:
@@ -39,5 +40,17 @@ def load_data():
         cashflow["Amount"] = pd.to_numeric(cashflow["Amount"], errors="coerce")
     if "Amount" in budget_performance.columns:
         budget_performance["Amount"] = pd.to_numeric(budget_performance["Amount"], errors="coerce")
+
+    # Budget performance: normalize column names and derive metrics
+    budget_performance = budget_performance.rename(columns={"Subcategory": "SubCategory"})
+    if "Final Budget" in budget_performance.columns:
+        budget_performance["Final Budget"] = pd.to_numeric(budget_performance["Final Budget"], errors="coerce")
+    if "Actual" in budget_performance.columns:
+        budget_performance["Actual"] = pd.to_numeric(budget_performance["Actual"], errors="coerce")
+    if {"Final Budget", "Actual"}.issubset(budget_performance.columns):
+        budget_performance["Difference"] = budget_performance["Actual"] - budget_performance["Final Budget"]
+        budget_performance["Percentage Utilization"] = (
+            budget_performance["Actual"] / budget_performance["Final Budget"]
+        ) * 100
 
     return income, expenditure, assets, liabilities, cashflow, budget_performance
