@@ -310,7 +310,7 @@ with st.sidebar:
             key=f"nav_{item}",
             on_click=set_tab,
             args=(item,),
-            use_container_width=True,
+            width="stretch",
             type="primary" if is_active else "secondary"
         )
 
@@ -504,7 +504,7 @@ def render_comparison(title, years, chart_builder):
             with col:
                 fig = chart_builder(year, f"FY {year}")
                 if fig:
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, width="stretch")
                 else:
                     st.info(f"No data for {year}")
 
@@ -618,7 +618,7 @@ if active == "Overview":
         markers=True,
         color_discrete_map={"Income": NCA_BLUE, "Expenditure": NCA_ORANGE}
     )
-    st.plotly_chart(apply_executive_style(fig_ie), use_container_width=True)
+    st.plotly_chart(apply_executive_style(fig_ie), width="stretch")
 
     st.markdown("#### Balance Sheet Trend")
     assets_trend = pd.DataFrame({
@@ -634,7 +634,7 @@ if active == "Overview":
         markers=True,
         color_discrete_map={"Assets": NCA_BLUE, "Liabilities": NCA_ORANGE}
     )
-    st.plotly_chart(apply_executive_style(fig_al), use_container_width=True)
+    st.plotly_chart(apply_executive_style(fig_al), width="stretch")
 
     st.markdown("#### Surplus Trajectory")
     surplus_df = pd.DataFrame({
@@ -648,7 +648,7 @@ if active == "Overview":
         title="Annual Surplus (Income - Expenditure)",
         color_discrete_sequence=[NCA_TEAL]
     )
-    st.plotly_chart(apply_executive_style(fig_surplus), use_container_width=True)
+    st.plotly_chart(apply_executive_style(fig_surplus), width="stretch")
 
 elif active == "Income":
     if comparison_mode:
@@ -670,7 +670,7 @@ elif active == "Income":
                         category_orders=INCOME_CATEGORY_ORDER,
                         title=f"Income Distribution - {year}"
                     )
-                    st.plotly_chart(apply_executive_style(fig), use_container_width=True)
+                    st.plotly_chart(apply_executive_style(fig), width="stretch")
 
                     income_subcat = income_year.groupby(["Category", "SubCategory"])["Amount"].sum().reset_index()
                     income_subcat = income_subcat[income_subcat["Amount"] > 0]
@@ -695,7 +695,7 @@ elif active == "Income":
                         fig_bar.update_traces(texttemplate="%{text}", textposition="outside")
                         fig_bar.update_layout(showlegend=False)
                         fig_bar.update_layout(yaxis_title="", xaxis_title="Amount")
-                        st.plotly_chart(apply_executive_style(fig_bar), use_container_width=True)
+                        st.plotly_chart(apply_executive_style(fig_bar), width="stretch")
     else:
         income_prev_year = get_prev_year(effective_year_for_tabs, all_years)
         income_prev_df = income[income["Financial Year"] == income_prev_year] if income_prev_year else pd.DataFrame()
@@ -792,7 +792,7 @@ elif active == "Income":
                          color_discrete_map=INCOME_COLOR_MAP,
                          category_orders=INCOME_CATEGORY_ORDER,
                          title=f"Income Distribution - {effective_year_for_tabs}")
-            st.plotly_chart(apply_executive_style(fig), use_container_width=True)
+            st.plotly_chart(apply_executive_style(fig), width="stretch")
 
         with snap_right:
             income_subcat = income_filtered.groupby(["Category", "SubCategory"])["Amount"].sum().reset_index()
@@ -818,7 +818,7 @@ elif active == "Income":
                 fig_bar.update_traces(texttemplate="%{text}", textposition="outside")
                 fig_bar.update_layout(showlegend=False)
                 fig_bar.update_layout(yaxis_title="", xaxis_title="Amount")
-                st.plotly_chart(apply_executive_style(fig_bar), use_container_width=True)
+                st.plotly_chart(apply_executive_style(fig_bar), width="stretch")
 
         st.markdown("---")
         section_header("Trend Explorer", "Compare categories or sub-categories across the full time period.")
@@ -870,7 +870,7 @@ elif active == "Income":
                 color_discrete_map=color_map,
                 title="Income Trend Over Time"
             )
-            st.plotly_chart(apply_executive_style(fig_trend), use_container_width=True)
+            st.plotly_chart(apply_executive_style(fig_trend), width="stretch")
         else:
             st.info("Select at least one item to view the trend.")
 
@@ -878,14 +878,14 @@ elif active == "Income":
         section_header("Income Detail Table", f"Category and sub-category snapshot for FY {effective_year_for_tabs}.")
         income_table = income_filtered.groupby(["Category", "SubCategory"])["Amount"].sum().reset_index()
         income_table = income_table.sort_values(["Category", "Amount"], ascending=[True, False])
-        st.dataframe(income_table, use_container_width=True)
+        st.dataframe(income_table, width="stretch")
         csv_income = income_table.to_csv(index=False).encode("utf-8")
         st.download_button(
             label="Download Income Snapshot (CSV)",
             data=csv_income,
             file_name=f"income_snapshot_FY_{effective_year_for_tabs}.csv",
             mime="text/csv",
-            use_container_width=False
+            width="content"
         )
 
 elif active == "Expenditure":
@@ -985,7 +985,7 @@ elif active == "Expenditure":
                              names="Category", values="Amount", hole=0.6, title=f"Operational Spend - {effective_year_for_tabs}",
                              color_discrete_map=EXP_COLOR_MAP,
                              category_orders=EXP_CATEGORY_ORDER)
-            st.plotly_chart(apply_executive_style(fig_exp), use_container_width=True)
+            st.plotly_chart(apply_executive_style(fig_exp), width="stretch")
 
         with snap_right:
             exp_subcat = exp_filtered.groupby(["Category", "SubCategory"])["Amount"].sum().reset_index()
@@ -1016,7 +1016,7 @@ elif active == "Expenditure":
                     yaxis=dict(categoryorder="array", categoryarray=exp_subcat_sorted["Label"].tolist(), autorange="reversed"),
                     margin=dict(l=80, r=80, t=80, b=60)
                 )
-                st.plotly_chart(apply_executive_style(fig_exp_sub), use_container_width=True)
+                st.plotly_chart(apply_executive_style(fig_exp_sub), width="stretch")
 
         st.markdown("---")
         section_header("Trend Explorer", "Compare categories or sub-categories across the full time period.")
@@ -1068,7 +1068,7 @@ elif active == "Expenditure":
                 color_discrete_map=color_map,
                 title="Expenditure Trend Over Time"
             )
-            st.plotly_chart(apply_executive_style(fig_trend), use_container_width=True)
+            st.plotly_chart(apply_executive_style(fig_trend), width="stretch")
         else:
             st.info("Select at least one item to view the trend.")
 
@@ -1076,14 +1076,14 @@ elif active == "Expenditure":
         section_header("Expenditure Detail Table", f"Category and sub-category snapshot for FY {effective_year_for_tabs}.")
         exp_table = exp_filtered.groupby(["Category", "SubCategory"])["Amount"].sum().reset_index()
         exp_table = exp_table.sort_values(["Category", "Amount"], ascending=[True, False])
-        st.dataframe(exp_table, use_container_width=True)
+        st.dataframe(exp_table, width="stretch")
         csv_exp = exp_table.to_csv(index=False).encode("utf-8")
         st.download_button(
             label="Download Expenditure Snapshot (CSV)",
             data=csv_exp,
             file_name=f"expenditure_snapshot_FY_{effective_year_for_tabs}.csv",
             mime="text/csv",
-            use_container_width=False
+            width="content"
         )
 
     if comparison_mode:
@@ -1104,7 +1104,7 @@ elif active == "Expenditure":
                         color_discrete_map=EXP_COLOR_MAP,
                         category_orders=EXP_CATEGORY_ORDER
                     )
-                    st.plotly_chart(apply_executive_style(fig_exp), use_container_width=True)
+                    st.plotly_chart(apply_executive_style(fig_exp), width="stretch")
 
                     exp_subcat = exp_year.groupby(["Category", "SubCategory"])["Amount"].sum().reset_index()
                     exp_subcat = exp_subcat[exp_subcat["Amount"] > 0]
@@ -1134,7 +1134,7 @@ elif active == "Expenditure":
                             yaxis=dict(categoryorder="array", categoryarray=exp_subcat_sorted["Label"].tolist(), autorange="reversed"),
                             margin=dict(l=80, r=80, t=80, b=60)
                         )
-                        st.plotly_chart(apply_executive_style(fig_exp_sub), use_container_width=True)
+                        st.plotly_chart(apply_executive_style(fig_exp_sub), width="stretch")
 
 elif active == "Assets":
     if not comparison_mode:
@@ -1239,7 +1239,7 @@ elif active == "Assets":
                 color_discrete_map=EXP_COLOR_MAP,
                 category_orders=EXP_CATEGORY_ORDER,
             )
-            st.plotly_chart(apply_executive_style(fig_assets), use_container_width=True)
+            st.plotly_chart(apply_executive_style(fig_assets), width="stretch")
 
         with snap_right:
             asset_subcat = assets_filtered.groupby(["Category", "SubCategory"])["Amount"].sum().reset_index()
@@ -1270,7 +1270,7 @@ elif active == "Assets":
                     yaxis=dict(categoryorder="array", categoryarray=asset_subcat_sorted["Label"].tolist(), autorange="reversed"),
                     margin=dict(l=80, r=80, t=80, b=60)
                 )
-                st.plotly_chart(apply_executive_style(fig_asset_sub), use_container_width=True)
+                st.plotly_chart(apply_executive_style(fig_asset_sub), width="stretch")
 
         st.markdown("---")
         section_header("Trend Explorer", "Compare categories or sub-categories across the full time period.")
@@ -1322,7 +1322,7 @@ elif active == "Assets":
                 color_discrete_map=color_map,
                 title="Assets Trend Over Time"
             )
-            st.plotly_chart(apply_executive_style(fig_trend), use_container_width=True)
+            st.plotly_chart(apply_executive_style(fig_trend), width="stretch")
         else:
             st.info("Select at least one item to view the trend.")
 
@@ -1330,14 +1330,14 @@ elif active == "Assets":
         section_header("Assets Detail Table", f"Category and sub-category snapshot for FY {effective_year_for_tabs}.")
         asset_table = assets_filtered.groupby(["Category", "SubCategory"])["Amount"].sum().reset_index()
         asset_table = asset_table.sort_values(["Category", "Amount"], ascending=[True, False])
-        st.dataframe(asset_table, use_container_width=True)
+        st.dataframe(asset_table, width="stretch")
         csv_assets = asset_table.to_csv(index=False).encode("utf-8")
         st.download_button(
             label="Download Assets Snapshot (CSV)",
             data=csv_assets,
             file_name=f"assets_snapshot_FY_{effective_year_for_tabs}.csv",
             mime="text/csv",
-            use_container_width=False
+            width="content"
         )
 
     if comparison_mode:
@@ -1359,7 +1359,7 @@ elif active == "Assets":
                         color_discrete_map=EXP_COLOR_MAP,
                         category_orders=EXP_CATEGORY_ORDER,
                     )
-                    st.plotly_chart(apply_executive_style(fig_assets), use_container_width=True)
+                    st.plotly_chart(apply_executive_style(fig_assets), width="stretch")
 
                     asset_subcat = assets_year.groupby(["Category", "SubCategory"])["Amount"].sum().reset_index()
                     asset_subcat = asset_subcat[asset_subcat["Amount"] > 0]
@@ -1389,7 +1389,7 @@ elif active == "Assets":
                             yaxis=dict(categoryorder="array", categoryarray=asset_subcat_sorted["Label"].tolist(), autorange="reversed"),
                             margin=dict(l=80, r=80, t=80, b=60)
                         )
-                        st.plotly_chart(apply_executive_style(fig_asset_sub), use_container_width=True)
+                        st.plotly_chart(apply_executive_style(fig_asset_sub), width="stretch")
 
 elif active == "Liabilities":
     if not comparison_mode:
@@ -1494,7 +1494,7 @@ elif active == "Liabilities":
                 color_discrete_map=EXP_COLOR_MAP,
                 category_orders=EXP_CATEGORY_ORDER,
             )
-            st.plotly_chart(apply_executive_style(fig_liab), use_container_width=True)
+            st.plotly_chart(apply_executive_style(fig_liab), width="stretch")
 
         with snap_right:
             liab_subcat = liab_filtered.groupby(["Category", "SubCategory"])["Amount"].sum().reset_index()
@@ -1525,7 +1525,7 @@ elif active == "Liabilities":
                     yaxis=dict(categoryorder="array", categoryarray=liab_subcat_sorted["Label"].tolist(), autorange="reversed"),
                     margin=dict(l=80, r=80, t=80, b=60)
                 )
-                st.plotly_chart(apply_executive_style(fig_liab_sub), use_container_width=True)
+                st.plotly_chart(apply_executive_style(fig_liab_sub), width="stretch")
 
         st.markdown("---")
         section_header("Trend Explorer", "Compare categories or sub-categories across the full time period.")
@@ -1577,7 +1577,7 @@ elif active == "Liabilities":
                 color_discrete_map=color_map,
                 title="Liabilities Trend Over Time"
             )
-            st.plotly_chart(apply_executive_style(fig_trend), use_container_width=True)
+            st.plotly_chart(apply_executive_style(fig_trend), width="stretch")
         else:
             st.info("Select at least one item to view the trend.")
 
@@ -1585,14 +1585,14 @@ elif active == "Liabilities":
         section_header("Liabilities Detail Table", f"Category and sub-category snapshot for FY {effective_year_for_tabs}.")
         liab_table = liab_filtered.groupby(["Category", "SubCategory"])["Amount"].sum().reset_index()
         liab_table = liab_table.sort_values(["Category", "Amount"], ascending=[True, False])
-        st.dataframe(liab_table, use_container_width=True)
+        st.dataframe(liab_table, width="stretch")
         csv_liab = liab_table.to_csv(index=False).encode("utf-8")
         st.download_button(
             label="Download Liabilities Snapshot (CSV)",
             data=csv_liab,
             file_name=f"liabilities_snapshot_FY_{effective_year_for_tabs}.csv",
             mime="text/csv",
-            use_container_width=False
+            width="content"
         )
 
     if comparison_mode:
@@ -1614,7 +1614,7 @@ elif active == "Liabilities":
                         color_discrete_map=EXP_COLOR_MAP,
                         category_orders=EXP_CATEGORY_ORDER,
                     )
-                    st.plotly_chart(apply_executive_style(fig_liab), use_container_width=True)
+                    st.plotly_chart(apply_executive_style(fig_liab), width="stretch")
 
                     liab_subcat = liab_year.groupby(["Category", "SubCategory"])["Amount"].sum().reset_index()
                     liab_subcat = liab_subcat[liab_subcat["Amount"] > 0]
@@ -1644,7 +1644,7 @@ elif active == "Liabilities":
                             yaxis=dict(categoryorder="array", categoryarray=liab_subcat_sorted["Label"].tolist(), autorange="reversed"),
                             margin=dict(l=80, r=80, t=80, b=60)
                         )
-                        st.plotly_chart(apply_executive_style(fig_liab_sub), use_container_width=True)
+                        st.plotly_chart(apply_executive_style(fig_liab_sub), width="stretch")
 
 elif active == "Cashflow":
     section_header("Cashflow", "Data coming soon.")
@@ -1816,7 +1816,7 @@ elif active == "Budget Performance":
                 color_discrete_map={"Final Budget": NCA_BLUE, "Actual": NCA_ORANGE}
             )
             fig_budget.update_layout(showlegend=True, yaxis_title="", xaxis_title="Amount")
-            st.plotly_chart(apply_executive_style(fig_budget), use_container_width=True)
+            st.plotly_chart(apply_executive_style(fig_budget), width="stretch")
 
         with chart_col2:
             variance_sorted = budget_cat.sort_values("Variance", ascending=True)
@@ -1830,7 +1830,7 @@ elif active == "Budget Performance":
                 color_continuous_scale=["#10B981", "#F59E0B", "#F43F5E"]
             )
             fig_var.update_layout(showlegend=False, yaxis_title="", xaxis_title="Variance")
-            st.plotly_chart(apply_executive_style(fig_var), use_container_width=True)
+            st.plotly_chart(apply_executive_style(fig_var), width="stretch")
 
         st.markdown("---")
         section_header("Utilization", "Budget utilization percentage by category.")
@@ -1845,7 +1845,7 @@ elif active == "Budget Performance":
             color_continuous_scale=["#0EA5A4", "#F59E0B", "#F43F5E"]
         )
         fig_util.update_layout(showlegend=False, yaxis_title="", xaxis_title="Utilization %")
-        st.plotly_chart(apply_executive_style(fig_util), use_container_width=True)
+        st.plotly_chart(apply_executive_style(fig_util), width="stretch")
 
         st.markdown("---")
         section_header("Trend Explorer", "Compare budget, actuals, variance, or utilization across years.")
@@ -1920,7 +1920,7 @@ elif active == "Budget Performance":
             )
             if trend_metric == "Utilization %":
                 fig_trend.update_yaxes(ticksuffix="%")
-            st.plotly_chart(apply_executive_style(fig_trend), use_container_width=True)
+            st.plotly_chart(apply_executive_style(fig_trend), width="stretch")
         else:
             st.info("Select at least one item to view the trend.")
 
@@ -1931,14 +1931,14 @@ elif active == "Budget Performance":
             budget_table["Difference"] = budget_table["Actual"] - budget_table["Final Budget"]
             budget_table["Percentage Utilization"] = (budget_table["Actual"] / budget_table["Final Budget"]) * 100
         budget_table = budget_table.sort_values(["Category", "SubCategory"])
-        st.dataframe(budget_table, use_container_width=True)
+        st.dataframe(budget_table, width="stretch")
         csv_budget = budget_table.to_csv(index=False).encode("utf-8")
         st.download_button(
             label="Download Budget Performance Snapshot (CSV)",
             data=csv_budget,
             file_name=f"budget_performance_FY_{effective_year_for_tabs}.csv",
             mime="text/csv",
-            use_container_width=False
+            width="content"
         )
 
 # --- 8. Board-Ready Footer ---
