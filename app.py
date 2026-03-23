@@ -465,6 +465,12 @@ def format_amount(value):
     return f"KSh {value:,.0f}"
 
 
+def format_billions_label(value):
+    if pd.isna(value):
+        return "0.00B"
+    return f"{value / 1_000_000_000:.2f}B"
+
+
 def format_yoy(curr, prev):
     if not prev or prev == 0: return "N/A"
     variance = ((curr - prev) / prev) * 100
@@ -490,6 +496,24 @@ def apply_executive_style(fig):
     fig.update_yaxes(showgrid=True, gridcolor="rgba(203, 213, 225, 0.4)", tickfont=dict(size=11, color="#64748B"), automargin=True)
     fig.update_traces(cliponaxis=False, selector=dict(type="bar"))
     return fig
+
+
+def build_linear_trend(values):
+    clean_values = pd.Series(values, dtype="float64").reset_index(drop=True)
+    point_count = len(clean_values)
+    if point_count < 2:
+        return clean_values
+
+    x_vals = pd.Series(range(point_count), dtype="float64")
+    x_mean = x_vals.mean()
+    y_mean = clean_values.mean()
+    denominator = ((x_vals - x_mean) ** 2).sum()
+    if denominator == 0:
+        return pd.Series([y_mean] * point_count, dtype="float64")
+
+    slope = (((x_vals - x_mean) * (clean_values - y_mean)).sum()) / denominator
+    intercept = y_mean - (slope * x_mean)
+    return (x_vals * slope) + intercept
 
 
 def render_comparison(title, years, chart_builder):
@@ -605,19 +629,79 @@ if active == "Overview":
 
     st.markdown("---")
     st.markdown("#### Revenue and Expenditure Trend")
+    overview_years = sorted(set(income_yearly.index).union(set(exp_yearly.index)))
     overview_trend = pd.DataFrame({
-        "Financial Year": income_yearly.index,
-        "Income": income_yearly.values,
-        "Expenditure": exp_yearly.reindex(income_yearly.index).fillna(0).values
+        "Financial Year": overview_years,
+        "Revenue": income_yearly.reindex(overview_years).fillna(0).values,
+        "Expenditure": exp_yearly.reindex(overview_years).fillna(0).values
     })
-    fig_ie = px.line(
-        overview_trend,
-        x="Financial Year",
-        y=["Income", "Expenditure"],
-        title="Revenue vs Expenditure (All Years)",
-        markers=True,
-        color_discrete_map={"Income": NCA_BLUE, "Expenditure": NCA_ORANGE}
-    )
+    control_col1, control_col2, context_col = st.columns([1, 1, 2])
+    with control_col1:
+        overview_chart_type = st.selectbox(
+            "Chart Type",
+            options=["Bar with Trendline", "Line Chart"],
+            key="overview_rev_exp_chart_type"
+        )
+    with control_col2:
+        overview_metric = st.selectbox(
+            "Metric",
+            options=["Revenue", "Expenditure"],
+            key="overview_rev_exp_metric"
+        )
+    with context_col:
+        st.caption("Switch between the original line chart and the bar chart with a fitted trend line.")
+
+    selected_color = NCA_BLUE if overview_metric == "Revenue" else NCA_ORANGE
+    overview_metric_df = overview_trend[["Financial Year", overview_metric]].copy()
+    overview_metric_df["Trend"] = build_linear_trend(overview_metric_df[overview_metric])
+    overview_metric_df["Label"] = overview_metric_df[overview_metric].apply(format_billions_label)
+
+    fig_ie = go.Figure()
+    if overview_chart_type == "Bar with Trendline":
+        fig_ie.add_bar(
+            x=overview_metric_df["Financial Year"],
+            y=overview_metric_df[overview_metric],
+            name=overview_metric,
+            marker_color=selected_color,
+            text=overview_metric_df["Label"],
+            textposition="outside",
+            hovertemplate="FY %{x}<br>Amount: KSh %{y:,.0f}<extra></extra>"
+        )
+        fig_ie.add_trace(
+            go.Scatter(
+                x=overview_metric_df["Financial Year"],
+                y=overview_metric_df["Trend"],
+                name="Trendline",
+                mode="lines+markers",
+                text=overview_metric_df["Label"],
+                textposition="bottom center",
+                line=dict(color="rgba(51, 65, 85, 0.35)", width=2, dash="dash"),
+                marker=dict(size=6, color="rgba(51, 65, 85, 0.35)"),
+                hovertemplate="FY %{x}<br>Trend: KSh %{y:,.0f}<extra></extra>"
+            )
+        )
+        fig_ie.update_layout(
+            title=f"{overview_metric} Trend with Trendline (All Years)",
+            xaxis_title="Financial Year",
+            yaxis_title="Amount",
+            legend_title_text=""
+        )
+    else:
+        fig_ie = px.line(
+            overview_metric_df,
+            x="Financial Year",
+            y=overview_metric,
+            title=f"{overview_metric} Line Trend (All Years)",
+            markers=True,
+            text="Label",
+            color_discrete_sequence=[selected_color]
+        )
+        fig_ie.update_traces(textposition="top center", cliponaxis=False)
+        fig_ie.update_layout(
+            xaxis_title="Financial Year",
+            yaxis_title="Amount",
+            showlegend=False
+        )
     st.plotly_chart(apply_executive_style(fig_ie), width="stretch")
 
     st.markdown("#### Balance Sheet Trend")
